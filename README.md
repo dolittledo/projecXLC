@@ -23,4 +23,4 @@ If you are developing a production application, we recommend using TypeScript wi
 4. Copy `.env.example` to `.env`, then set `VITE_GOOGLE_SHEETS_URL` to that URL.
 5. Restart the Vite development server.
 
-Proposal data is still saved locally as a fallback. The E-KTP file data is also sent with the proposal payload, so restrict spreadsheet access appropriately.
+Proposal data is still saved locally as a fallback. When the Apps Script endpoint is used, it creates a `ProjectXLC - [Nama Bangunan]` folder in Google Drive, saves photos as `Tampak Depan Bangunan`, `Tampak Dalam Lantai Dasar`, and `Tampak Dalam Lantai Atas`, and adds the folder URL, three photo URLs, latitude, longitude, and Google Maps URL to the Sheet. After changing `Code.gs`, deploy a new version of the Apps Script Web App and update the URL if it changes.
