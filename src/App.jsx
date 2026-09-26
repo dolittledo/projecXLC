@@ -32,20 +32,23 @@ function getAccounts() {
   }
 }
 
-function Field({ label, name, value, onChange, type = 'text', options, placeholder, required = true }) {
+function Field({ label, name, value, onChange, type = 'text', options, placeholder, required }) {
+  const buildingFields = ['buildingName', 'address', 'floors', 'length', 'width', 'landArea', 'buildingArea', 'toilets', 'imb', 'shm', 'tileSize', 'tileColor', 'buildingCover']
+  const optionalFields = ['rentPrice', 'annualRent']
+  const isRequired = !optionalFields.includes(name) && (required ?? buildingFields.includes(name))
   const visibleOptions = options?.filter((option) => !option.toLowerCase().includes('diketahui'))
   const quantityFields = ['ac', 'fans', 'infocus', 'tv', 'dispenser', 'whiteboard', 'tables', 'chairs', 'gallons']
   const fieldOptions = visibleOptions || (quantityFields.includes(name) ? quantityOptions : name === 'floors' ? floorOptions : ['contractPeriod', 'minContractPeriod'].includes(name) ? contractPeriodOptions : name === 'maxContractPeriod' ? maxContractPeriodOptions : null)
 
   return (
     <label className="field">
-      <span>{label}{required ? <b aria-label="wajib"> *</b> : null}</span>
+      <span>{label}{isRequired ? <b aria-label="wajib"> *</b> : null}</span>
       {fieldOptions ? (
-        <select name={name} value={value} onChange={onChange} required={required}>{fieldOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select>
+        <select name={name} value={value} onChange={onChange} required={isRequired}>{fieldOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select>
       ) : type === 'textarea' ? (
-        <textarea name={name} value={value} onChange={onChange} placeholder={placeholder} required={required} rows="3" />
+        <textarea name={name} value={value} onChange={onChange} placeholder={placeholder} required={isRequired} rows="3" />
       ) : (
-        <input name={name} type={type} value={value} onChange={onChange} placeholder={placeholder} required={required} inputMode={type === 'number' ? 'decimal' : undefined} />
+        <input name={name} type={type} value={value} onChange={onChange} placeholder={placeholder} required={isRequired} inputMode={type === 'number' ? 'decimal' : undefined} />
       )}
     </label>
   )
@@ -56,7 +59,7 @@ function PhotoUpload({ label, photo, onChange }) {
     <label className="photo-upload">
       <span className="photo-label">{label}</span>
       {photo ? <img src={photo.url} alt={label} /> : <span className="photo-placeholder"><strong>+</strong><small>Pilih foto</small></span>}
-      <input type="file" accept="image/*" onChange={onChange} required={!photo} />
+      <input type="file" accept="image/*" onChange={onChange} />
       {photo ? <small className="photo-name">{photo.name}</small> : null}
     </label>
   )
