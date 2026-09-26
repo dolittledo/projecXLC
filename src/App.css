@@ -73,7 +73,7 @@ form { display: flex; flex-direction: column; }
 #rent { order: 2; }
 #facility { order: 3; }
 #location { order: 4; }
-#coordinates { order: 4.5; }
+#coordinates { order: 6.5; }
 #other { order: 5; }
 #photos { order: 6; }
 .preview-menu, .preview-panel { order: 7; }
