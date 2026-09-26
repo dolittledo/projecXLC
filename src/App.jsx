@@ -62,6 +62,27 @@ function PhotoUpload({ label, photo, onChange }) {
   )
 }
 
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const image = new Image()
+      image.onload = () => {
+        const scale = Math.min(1, 1600 / Math.max(image.width, image.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.round(image.width * scale)
+        canvas.height = Math.round(image.height * scale)
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height)
+        resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.78), type: 'image/jpeg' })
+      }
+      image.onerror = reject
+      image.src = reader.result
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 function LoginScreen({ onLogin }) {
   const [credentials, setCredentials] = useState({ username: '', password: '' })
   const [error, setError] = useState('')
@@ -217,13 +238,16 @@ function App() {
     setSaved(false)
   }
 
-  function handlePhotoChange(name, event) {
+  async function handlePhotoChange(name, event) {
     const file = event.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => setPhotos((current) => ({ ...current, [name]: { name: file.name, type: file.type, dataUrl: reader.result, url: URL.createObjectURL(file) } }))
-    reader.readAsDataURL(file)
-    setSaved(false)
+    try {
+      const compressed = await compressImage(file)
+      setPhotos((current) => ({ ...current, [name]: { name: file.name, type: compressed.type, dataUrl: compressed.dataUrl, url: URL.createObjectURL(file) } }))
+      setSaved(false)
+    } catch {
+      setLocationError('Foto tidak dapat diproses.')
+    }
   }
 
   function captureLocation() {
@@ -248,7 +272,7 @@ function App() {
     const photoFiles = Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo ? { name: photo.name, type: photo.type, dataUrl: photo.dataUrl } : null]))
     const googleMapsLink = form.latitude && form.longitude ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}` : 'https://www.google.com/maps'
     const payload = { ...form, photoNames, photoFiles, googleMapsLink, submittedAt, submittedBy: username }
-    localStorage.setItem('projectxlc-building-form', JSON.stringify(payload))
+    localStorage.setItem('projectxlc-building-form', JSON.stringify({ ...form, photoNames, googleMapsLink, submittedAt, submittedBy: username }))
     setLastSaved(submittedAt)
     setSaved(true)
     setSaveMessage(googleSheetsUrl ? 'Mengirim data ke Google Sheets...' : 'Draft tersimpan di perangkat. Hubungkan Google Sheets untuk sinkronisasi.')
