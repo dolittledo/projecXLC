@@ -20,7 +20,7 @@ function doPost(event) {
     photoUrls[photoKey] = savePhoto(folder, photo, PHOTO_LABELS[photoKey]).getUrl()
   })
 
-  const rowPayload = { ...payload, googleMapsLink: buildMapsLink(payload), photoFolderUrl: folder.getUrl() }
+  const rowPayload = { ...buildSheetPayload(payload), googleMapsLink: buildMapsLink(payload), photoFolderUrl: folder.getUrl() }
   Object.keys(PHOTO_LABELS).forEach((photoKey) => {
     rowPayload[`${photoKey}PhotoUrl`] = photoUrls[photoKey] || ''
   })
@@ -41,6 +41,24 @@ function doPost(event) {
 
   sheet.appendRow(headers.map((header) => rowPayload[header] ?? ''))
   return jsonResponse({ ok: true, photoUrls, photoFolderUrl: folder.getUrl(), googleMapsLink: rowPayload.googleMapsLink })
+}
+
+function buildSheetPayload(payload) {
+  const base = {
+    user: payload.user ?? payload.submittedBy ?? '',
+    dateTimeData: payload.dateTimeData ?? payload.submittedAt ?? new Date().toISOString(),
+  }
+
+  const remaining = Object.entries(payload).filter(([key]) => ![
+    'user',
+    'dateTimeData',
+    'submittedBy',
+    'submittedAt',
+    'photoFiles',
+    'photoNames',
+  ].includes(key))
+
+  return Object.fromEntries([...Object.entries(base), ...remaining])
 }
 
 function getOrCreatePhotoFolder(buildingName) {
