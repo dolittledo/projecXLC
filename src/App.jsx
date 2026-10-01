@@ -108,6 +108,21 @@ function removeUserBuildingDraft(username) {
   }
 }
 
+
+function getPhotoNames(photos) {
+  return Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || '']))
+}
+
+function getPhotoFiles(photos) {
+  return Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo ? { name: photo.name, type: photo.type, dataUrl: photo.dataUrl } : null]))
+}
+
+function restorePhotoState(photoFiles) {
+  return Object.fromEntries(['front', 'groundFloor', 'upperFloor'].map((name) => {
+    const photo = photoFiles?.[name]
+    return [name, photo?.dataUrl ? { ...photo, url: photo.dataUrl } : null]
+  }))
+}
 function getUserSubmissionsKey(username) {
   const normalizedUsername = String(username || 'USER').trim().toUpperCase()
   return `${userSubmissionsPrefix}${encodeURIComponent(normalizedUsername)}`
@@ -689,8 +704,8 @@ function App() {
     const reportForm = submission?.form || (submission?.buildingName || submission?.address ? submission : form)
     const dateTimeData = submission?.submittedAt || new Date().toISOString()
     const googleMapsLink = submission?.googleMapsLink || (reportForm.latitude && reportForm.longitude ? `https://www.google.com/maps?q=${reportForm.latitude},${reportForm.longitude}` : 'https://www.google.com/maps')
-    const photoNames = submission?.photoNames || Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || '']))
-    const photoFiles = submission?.photoFiles || Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo ? { name: photo.name, type: photo.type, dataUrl: photo.dataUrl } : null]))
+    const photoNames = submission?.photoNames || getPhotoNames(photos)
+    const photoFiles = submission?.photoFiles || getPhotoFiles(photos)
     sessionStorage.setItem('projectxlc-report-preview', JSON.stringify({ form: reportForm, user: submission?.submittedBy || username, dateTimeData, photoNames, photoFiles, googleMapsLink }))
     const reportWindow = window.open(`${window.location.pathname}?report=1`, '_blank')
     if (!reportWindow) setLocationError('Tab laporan diblokir oleh browser. Izinkan pop-up lalu coba lagi.')
@@ -734,10 +749,7 @@ function App() {
     setDraftExists(Boolean(draft))
     setDraftData(draft)
     setForm({ ...initialForm, ...(draft || {}) })
-    setPhotos(Object.fromEntries(['front', 'groundFloor', 'upperFloor'].map((name) => {
-      const photo = draft?.photoFiles?.[name]
-      return [name, photo ? { ...photo, url: photo.dataUrl } : null]
-    })))
+    setPhotos(restorePhotoState(draft?.photoFiles))
     setLastSaved(draft?.submittedAt || null)
     setSaved(false)
     setSaveMessage('')
@@ -779,8 +791,8 @@ function App() {
 
   const currentReport = draftData || countFilledFormFields(form) > 0 ? {
     form,
-    photoNames: Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || ''])),
-    photoFiles: Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo ? { name: photo.name, type: photo.type, dataUrl: photo.dataUrl } : null])),
+    photoNames: getPhotoNames(photos),
+    photoFiles: getPhotoFiles(photos),
     googleMapsLink: form.latitude && form.longitude ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}` : 'https://www.google.com/maps',
     submittedAt: draftData?.submittedAt || lastSaved || new Date().toISOString(),
     submittedBy: username,
@@ -839,8 +851,8 @@ function App() {
       minContractPeriod: Number(form.minContractPeriod || 0),
       maxContractPeriod: Number(form.maxContractPeriod || 0),
     }
-    const photoNames = Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || '']))
-    const photoFiles = Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo ? { name: photo.name, type: photo.type, dataUrl: photo.dataUrl } : null]))
+    const photoNames = getPhotoNames(photos)
+    const photoFiles = getPhotoFiles(photos)
     const googleMapsLink = form.latitude && form.longitude ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}` : 'https://www.google.com/maps'
     const payload = {
       user: username,
@@ -850,9 +862,11 @@ function App() {
       photoFiles,
       googleMapsLink,
     }
-    const submittedRecord = { form: normalizedForm, photoNames, googleMapsLink, submittedAt, submittedBy: username }
+    const submittedRecord = { form: normalizedForm, photoNames, photoFiles, googleMapsLink, submittedAt, submittedBy: username }
     setSubmittedRecords(saveUserSubmission(username, submittedRecord))
-    localStorage.setItem(getUserBuildingDraftKey(username), JSON.stringify({ ...normalizedForm, photoNames, googleMapsLink, submittedAt, submittedBy: username }))
+    const savedRecord = { ...normalizedForm, photoNames, photoFiles, googleMapsLink, submittedAt, submittedBy: username }
+    localStorage.setItem(getUserBuildingDraftKey(username), JSON.stringify(savedRecord))
+    setDraftData(savedRecord)
     setDraftExists(true)
     setLastSaved(submittedAt)
     setSaved(true)
@@ -875,9 +889,12 @@ function App() {
 
   function saveDraft() {
     const savedAt = new Date().toISOString()
-    const photoNames = Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || '']))
+    const photoNames = getPhotoNames(photos)
+    const photoFiles = getPhotoFiles(photos)
     const googleMapsLink = form.latitude && form.longitude ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}` : 'https://www.google.com/maps'
-    localStorage.setItem(getUserBuildingDraftKey(username), JSON.stringify({ ...form, photoNames, googleMapsLink, submittedAt: savedAt, submittedBy: username }))
+    const savedRecord = { ...form, photoNames, photoFiles, googleMapsLink, submittedAt: savedAt, submittedBy: username }
+    localStorage.setItem(getUserBuildingDraftKey(username), JSON.stringify(savedRecord))
+    setDraftData(savedRecord)
     setDraftExists(true)
     setLastSaved(savedAt)
     setSaved(true)
