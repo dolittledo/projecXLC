@@ -4,6 +4,7 @@ import './App.css'
 const googleSheetsUrl = import.meta.env.VITE_GOOGLE_SHEETS_URL || ''
 const legacyBuildingDraftKey = 'projectxlc-building-form'
 const userBuildingDraftPrefix = `${legacyBuildingDraftKey}:`
+const userSubmissionsPrefix = 'projectxlc-submissions:'
 
 const initialForm = {
   buildingName: '', address: '', floors: '', length: '', width: '', landArea: '', buildingArea: '', toilets: '', imb: '', shm: '', tileSize: '', tileColor: 'Krem', buildingCover: '',
@@ -105,6 +106,27 @@ function removeUserBuildingDraft(username) {
   } catch {
     localStorage.removeItem(legacyBuildingDraftKey)
   }
+}
+
+function getUserSubmissionsKey(username) {
+  const normalizedUsername = String(username || 'USER').trim().toUpperCase()
+  return `${userSubmissionsPrefix}${encodeURIComponent(normalizedUsername)}`
+}
+
+function getUserSubmissions(username) {
+  try {
+    const submissions = JSON.parse(localStorage.getItem(getUserSubmissionsKey(username)) || '[]')
+    return Array.isArray(submissions) ? submissions : []
+  } catch {
+    return []
+  }
+}
+
+function saveUserSubmission(username, submission) {
+  const submissions = getUserSubmissions(username)
+  const nextSubmissions = [submission, ...submissions.filter((entry) => entry.submittedAt !== submission.submittedAt)].slice(0, 50)
+  localStorage.setItem(getUserSubmissionsKey(username), JSON.stringify(nextSubmissions))
+  return nextSubmissions
 }
 
 function formatPriceValue(value, locale = 'id-ID', currency = 'IDR') {
@@ -334,7 +356,7 @@ function ReportPage({ data }) {
   }
 
   function closeReportAndClear() {
-    if (!window.confirm('Kembali ke formulir dan hapus semua isian?')) return
+    if (!window.confirm('Kembali ke menu utama dan hapus semua isian?')) return
 
     if (!window.opener || window.opener.closed) {
       removeUserBuildingDraft(data.user)
@@ -344,15 +366,16 @@ function ReportPage({ data }) {
     }
 
     setIsClosing(true)
-    setSubmitStatus('Menghapus isian dan kembali ke formulir...')
+    setSubmitStatus('Menghapus isian dan kembali ke menu utama...')
+    removeUserBuildingDraft(data.user)
+    sessionStorage.removeItem('projectxlc-report-preview')
     const timeoutId = window.setTimeout(() => {
       window.removeEventListener('message', handleClearResult)
-      setIsClosing(false)
-      setSubmitStatus('Formulir tidak merespons. Data belum dihapus.')
-    }, 10000)
+      window.location.assign(window.location.pathname)
+    }, 2000)
 
     function handleClearResult(event) {
-      if (event.origin !== window.location.origin || event.source !== window.opener || event.data?.type !== 'projectxlc:report-close-clear-result') return
+      if (event.origin !== window.location.origin || event.data?.type !== 'projectxl:report-close-clear-result') return
       window.clearTimeout(timeoutId)
       window.removeEventListener('message', handleClearResult)
       if (event.data.ok) {
@@ -429,22 +452,42 @@ function ReportPage({ data }) {
   )
 }
 
-function MainMenu({ username, form, onOpenForm, onPreview, onLogout }) {
+function MainMenu({ username, form, submittedCount, onOpenForm, onOpenDraft, onOpenSubmitted, onPreview, onLogout }) {
   const hasDraft = Boolean(form.buildingName || form.address)
 
   return (
     <main className="app-shell main-menu-shell">
-      <header className="app-header"><div className="brand-mark">XLC<span>•</span></div><div className="main-menu-header-actions"><span className="header-meta">Main Menu / {username}</span><button type="button" className="logout-button" onClick={onLogout}>Keluar</button></div></header>
-      <section className="main-menu-intro"><p className="kicker">PROJECT XLC / WORKSPACE</p><h1>Selamat datang,<br /><em>{username}.</em></h1><p className="intro-copy">{form.buildingName ? `Lanjutkan proposal ${form.buildingName}.` : 'Mulai proposal bangunan baru.'}</p></section>
+      <header className="app-header"><div className="brand-mark">XLC<span>•</span></div><div className="main-menu-header-actions"><span className="header-meta">Main Menu / {username}</span></div></header>
+      <section className="main-menu-intro"><p className="kicker">PROJECT XLC / WORKSPACE</p><h1>Selamat datang,<br /><em>{username}.</em></h1>{form.buildingName ? <p className="intro-copy">Lanjutkan proposal {form.buildingName}.</p> : null}</section>
       <section className="main-menu-content" aria-label="Menu utama">
-        <div className="main-menu-heading"><div><p className="kicker">Pilih aktivitas</p><h2>PROPERTY INTAKE</h2></div><span className={hasDraft ? 'main-menu-status ready' : 'main-menu-status'}>{hasDraft ? 'Draft tersedia' : 'Belum ada draft'}</span></div>
+        <div className="main-menu-heading"><div><p className="kicker">Pilih aktivitas</p><h2>PROPERTY INTAKE</h2></div><button type="button" className="logout-button" onClick={onLogout}>SIGNOUT</button></div>
         <div className="main-menu-actions">
-          <button type="button" className="main-menu-action primary" onClick={onOpenForm}><span className="main-menu-index">01 / FORM</span><strong>{hasDraft ? 'Lanjutkan isian' : 'Isi formulir'}</strong><span className="main-menu-arrow" aria-hidden="true">→</span></button>
-          <button type="button" className="main-menu-action secondary" onClick={onPreview}><span className="main-menu-index">02 / REPORT</span><strong>PREVIEW</strong><span className="main-menu-arrow" aria-hidden="true">↗</span></button>
+          <button type="button" className="main-menu-action secondary form-action-card" onClick={onOpenForm}><span className="main-menu-index">01 / FORM</span><strong>FORM</strong><span className="main-menu-arrow" aria-hidden="true">→</span></button>
+          <button type="button" className="main-menu-action secondary draft-action-card" onClick={onOpenDraft}><span className="main-menu-index">02 / DRAFT</span><strong>DRAFT</strong><span className="main-menu-arrow" aria-hidden="true">↗</span></button>
+          <button type="button" className="main-menu-action secondary submitted-action-card" onClick={onOpenSubmitted}><span className="main-menu-index">03 / HISTORY</span><strong>SUBMITTED</strong><span className="main-menu-count">{submittedCount}</span></button>
+          <button type="button" className="main-menu-action secondary preview-action-card" onClick={onPreview}><span className="main-menu-index">04 / REPORT</span><strong>PREVIEW</strong><span className="main-menu-arrow" aria-hidden="true">↗</span></button>
         </div>
         {hasDraft ? <div className="main-menu-draft"><span>Proposal terakhir</span><strong>{form.buildingName || 'Nama bangunan belum diisi'}</strong><span>{form.address || 'Alamat belum diisi'}</span></div> : null}
       </section>
       <footer className="app-footer"><span>PROJECTXLC</span><span>Property Intake</span></footer>
+    </main>
+  )
+}
+
+function SubmittedPage({ username, submissions, onBack, onPreview }) {
+  return (
+    <main className="app-shell main-menu-shell">
+      <header className="app-header"><div className="brand-mark">XLC<span>•</span></div><div className="main-menu-header-actions"><span className="header-meta">SUBMITTED / {username}</span><button type="button" className="preview-button" onClick={onBack}>Main Menu</button></div></header>
+      <section className="main-menu-intro"><p className="kicker">PROJECT XLC / SUBMISSION HISTORY</p><h1>SUBMITTED</h1><p className="intro-copy">{submissions.length} data terkirim</p></section>
+      <section className="submitted-list" aria-label="Submitted data">
+        {submissions.length ? submissions.map((submission) => (
+          <article className="admin-data-panel submitted-item" key={submission.submittedAt}>
+            <div className="admin-panel-heading"><div><p className="kicker">{new Date(submission.submittedAt).toLocaleString('id-ID')}</p><h2>{submission.form?.buildingName || 'Tanpa nama bangunan'}</h2></div><span>SUBMITTED</span></div>
+            <div className="admin-data-grid"><div><small>Alamat</small><strong>{submission.form?.address || '-'}</strong></div><div><small>Harga sewa</small><strong>{submission.form?.rentPrice ? formatPriceValue(submission.form.rentPrice) : '-'}</strong></div></div>
+            <button type="button" className="preview-button submitted-preview-button" onClick={() => onPreview(submission)}>PREVIEW</button>
+          </article>
+        )) : <div className="admin-empty"><strong>Belum ada data terkirim</strong><span>Data akan muncul di sini setelah formulir disubmit.</span></div>}
+      </section>
     </main>
   )
 }
@@ -554,7 +597,8 @@ function App() {
     }
   })
   const [form, setForm] = useState(initialForm)
-  const [activePage, setActivePage] = useState('mainmenu')
+  const [activePage, setActivePage] = useState(() => new URLSearchParams(window.location.search).get('form') === '1' ? 'form' : 'mainmenu')
+  const [submittedRecords, setSubmittedRecords] = useState(() => getUserSubmissions(username))
   const [photos, setPhotos] = useState({ front: null, groundFloor: null, upperFloor: null })
   const [saved, setSaved] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
@@ -563,11 +607,12 @@ function App() {
   const formRef = useRef(null)
   const reportSubmitSource = useRef(null)
 
-  function openReportPage() {
-    const dateTimeData = new Date().toISOString()
-    const googleMapsLink = form.latitude && form.longitude ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}` : 'https://www.google.com/maps'
-    const photoNames = Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || '']))
-    sessionStorage.setItem('projectxlc-report-preview', JSON.stringify({ form, user: username, dateTimeData, photoNames, googleMapsLink }))
+  function openReportPage(submission = null) {
+    const reportForm = submission?.form || form
+    const dateTimeData = submission?.submittedAt || new Date().toISOString()
+    const googleMapsLink = submission?.googleMapsLink || (reportForm.latitude && reportForm.longitude ? `https://www.google.com/maps?q=${reportForm.latitude},${reportForm.longitude}` : 'https://www.google.com/maps')
+    const photoNames = submission?.photoNames || Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || '']))
+    sessionStorage.setItem('projectxlc-report-preview', JSON.stringify({ form: reportForm, user: submission?.submittedBy || username, dateTimeData, photoNames, googleMapsLink }))
     const reportWindow = window.open(`${window.location.pathname}?report=1`, '_blank')
     if (!reportWindow) setLocationError('Tab laporan diblokir oleh browser. Izinkan pop-up lalu coba lagi.')
   }
@@ -593,6 +638,14 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  function openDraftPage() {
+    openFormPage()
+  }
+
+  function openSubmittedPage() {
+    setActivePage('submitted')
+  }
+
   function previewFromMenu() {
     setActivePage('form')
     openReportPage()
@@ -605,6 +658,7 @@ function App() {
     setLastSaved(draft?.submittedAt || null)
     setSaved(false)
     setSaveMessage('')
+    setSubmittedRecords(getUserSubmissions(username))
   }, [username])
 
   useEffect(() => {
@@ -612,6 +666,7 @@ function App() {
       if (event.origin !== window.location.origin) return
       if (event.data?.type === 'projectxl:report-close-clear') {
         setForm(initialForm)
+        setActivePage('mainmenu')
         setPhotos({ front: null, groundFloor: null, upperFloor: null })
         setLastSaved(null)
         setSaved(false)
@@ -641,7 +696,8 @@ function App() {
   if (reportMode) return <ReportPage data={reportData} />
   if (!authenticated) return <LoginScreen onLogin={handleLogin} />
   if (role === 'admin') return <AdminDashboard username={username} onLogout={handleLogout} />
-  if (activePage === 'mainmenu') return <MainMenu username={username} form={form} onOpenForm={openFormPage} onPreview={previewFromMenu} onLogout={handleLogout} />
+  if (activePage === 'submitted') return <SubmittedPage username={username} submissions={submittedRecords} onBack={() => setActivePage('mainmenu')} onPreview={openReportPage} />
+  if (activePage === 'mainmenu') return <MainMenu username={username} form={form} submittedCount={submittedRecords.length} onOpenForm={openFormPage} onOpenDraft={openDraftPage} onOpenSubmitted={openSubmittedPage} onPreview={previewFromMenu} onLogout={handleLogout} />
 
   function handleChange(event) {
     const { name, value } = event.target
@@ -699,6 +755,8 @@ function App() {
       photoFiles,
       googleMapsLink,
     }
+    const submittedRecord = { form: normalizedForm, photoNames, googleMapsLink, submittedAt, submittedBy: username }
+    setSubmittedRecords(saveUserSubmission(username, submittedRecord))
     localStorage.setItem(getUserBuildingDraftKey(username), JSON.stringify({ ...normalizedForm, photoNames, googleMapsLink, submittedAt, submittedBy: username }))
     setLastSaved(submittedAt)
     setSaved(true)
