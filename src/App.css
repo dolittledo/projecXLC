@@ -265,9 +265,14 @@ form { display: flex; flex-direction: column; }
 .report-grid > div { min-width: 0; padding: 12px 0; border-bottom: 1px solid rgba(23, 43, 37, .07); }
 .report-grid dt { margin-bottom: 5px; }
 .report-grid dd { margin: 0; overflow-wrap: anywhere; font-size: .9rem; line-height: 1.45; }
-.report-photo-list > div { display: flex; justify-content: space-between; gap: 18px; }
-.report-photo-list dt { margin: 0; }
-.report-photo-list dd { text-align: right; }
+.report-photo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.report-photo-card { min-width: 0; margin: 0; }
+.report-photo-frame { display: grid; width: 100%; aspect-ratio: 4 / 3; place-items: center; overflow: hidden; border-radius: 8px; background: #e9eee8; }
+.report-photo-frame img { width: 100%; height: 100%; object-fit: cover; }
+.report-photo-frame span { padding: 14px; color: var(--muted); font-size: .8rem; text-align: center; overflow-wrap: anywhere; }
+.report-photo-card figcaption { display: flex; flex-direction: column; gap: 4px; padding-top: 9px; }
+.report-photo-card figcaption strong { font-size: .72rem; text-transform: uppercase; }
+.report-photo-card figcaption span { color: var(--muted); font-size: .76rem; overflow-wrap: anywhere; }
 .report-map-section { padding-bottom: 24px; }
 .report-map-section .map-link { margin-top: 0; }
 .report-sections { margin-top: 12px; }
@@ -422,8 +427,7 @@ form { display: flex; flex-direction: column; }
   .report-meta, .report-grid { grid-template-columns: 1fr; }
   .report-meta > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
   .report-section-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
-  .report-photo-list > div { align-items: flex-start; flex-direction: column; gap: 5px; }
-  .report-photo-list dd { text-align: left; }
+  .report-photo-grid { grid-template-columns: 1fr; }
   .preview-button { width: 100%; }
   .preview-photo-summary > div { align-items: flex-start; flex-direction: column; gap: 5px; }
   .preview-photo-summary strong { text-align: left; }

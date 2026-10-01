@@ -307,6 +307,22 @@ function ReportPage({ data }) {
         cursorY += 5
       }
 
+      function addPhoto(label, photo) {
+        addEntry(label, photo?.name)
+        if (!photo?.dataUrl) return
+        try {
+          const imageProperties = pdf.getImageProperties(photo.dataUrl)
+          const scale = Math.min(contentWidth / imageProperties.width, 80 / imageProperties.height)
+          const imageWidth = imageProperties.width * scale
+          const imageHeight = imageProperties.height * scale
+          ensureSpace(imageHeight + 8)
+          pdf.addImage(photo.dataUrl, photo.type === 'image/png' ? 'PNG' : 'JPEG', margin, cursorY, imageWidth, imageHeight)
+          cursorY += imageHeight + 8
+        } catch {
+          addEntry('Foto', 'Tidak dapat dimasukkan ke PDF')
+        }
+      }
+
       pdf.setProperties({ title: `Laporan ${data.form.buildingName || 'proposal bangunan'}`, subject: 'PROJECT XLC property report' })
       pdf.setFont('helvetica', 'bold')
       pdf.setFontSize(9)
@@ -332,7 +348,7 @@ function ReportPage({ data }) {
       })
 
       addSection('Upload foto')
-      ;[['front', 'Tampak depan bangunan'], ['groundFloor', 'Tampak dalam lantai dasar'], ['upperFloor', 'Tampak dalam lantai atas']].forEach(([key, label]) => addEntry(label, data.photoNames?.[key]))
+      ;[['front', 'Tampak depan bangunan'], ['groundFloor', 'Tampak dalam lantai dasar'], ['upperFloor', 'Tampak dalam lantai atas']].forEach(([key, label]) => addPhoto(label, data.photoFiles?.[key]))
       addSection('Peta lokasi')
       addEntry('Google Maps', data.googleMapsLink)
 
@@ -439,9 +455,16 @@ function ReportPage({ data }) {
         ))}
         <section className="report-section">
           <div className="report-section-heading"><p className="kicker">Visual documentation</p><h2>Upload foto</h2></div>
-          <dl className="report-grid report-photo-list">
-            {['front', 'groundFloor', 'upperFloor'].map((key, index) => <div key={key}><dt>{['Tampak depan bangunan', 'Tampak dalam lantai dasar', 'Tampak dalam lantai atas'][index]}</dt><dd>{data.photoNames?.[key] || '-'}</dd></div>)}
-          </dl>
+          <div className="report-photo-grid">
+            {[
+              ['front', 'Tampak depan bangunan'],
+              ['groundFloor', 'Tampak dalam lantai dasar'],
+              ['upperFloor', 'Tampak dalam lantai atas'],
+            ].map(([key, label]) => {
+              const photo = data.photoFiles?.[key]
+              return <figure className="report-photo-card" key={key}><div className="report-photo-frame">{photo?.dataUrl ? <img src={photo.dataUrl} alt={label} /> : <span>{data.photoNames?.[key] || 'Foto belum diunggah'}</span>}</div><figcaption><strong>{label}</strong><span>{photo?.name || data.photoNames?.[key] || '-'}</span></figcaption></figure>
+            })}
+          </div>
         </section>
         <section className="report-section report-map-section">
           <div className="report-section-heading"><p className="kicker">Location reference</p><h2>Peta lokasi</h2></div>
@@ -612,7 +635,8 @@ function App() {
     const dateTimeData = submission?.submittedAt || new Date().toISOString()
     const googleMapsLink = submission?.googleMapsLink || (reportForm.latitude && reportForm.longitude ? `https://www.google.com/maps?q=${reportForm.latitude},${reportForm.longitude}` : 'https://www.google.com/maps')
     const photoNames = submission?.photoNames || Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || '']))
-    sessionStorage.setItem('projectxlc-report-preview', JSON.stringify({ form: reportForm, user: submission?.submittedBy || username, dateTimeData, photoNames, googleMapsLink }))
+    const photoFiles = submission?.photoFiles || Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo ? { name: photo.name, type: photo.type, dataUrl: photo.dataUrl } : null]))
+    sessionStorage.setItem('projectxlc-report-preview', JSON.stringify({ form: reportForm, user: submission?.submittedBy || username, dateTimeData, photoNames, photoFiles, googleMapsLink }))
     const reportWindow = window.open(`${window.location.pathname}?report=1`, '_blank')
     if (!reportWindow) setLocationError('Tab laporan diblokir oleh browser. Izinkan pop-up lalu coba lagi.')
   }
