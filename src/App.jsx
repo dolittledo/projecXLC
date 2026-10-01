@@ -141,6 +141,15 @@ function formatPriceValue(value, locale = 'id-ID', currency = 'IDR') {
   }).format(numericValue)
 }
 
+function countFilledFormFields(form) {
+  return Object.keys(initialForm).filter((key) => {
+    const value = form[key]
+    if (value == null || String(value).trim() === '') return false
+    if (initialForm[key] === '') return String(value).trim() !== '0'
+    return String(value) !== String(initialForm[key])
+  }).length
+}
+
 function Field({ label, name, value, onChange, type = 'text', options, placeholder, required }) {
   const buildingFields = ['buildingName', 'address', 'floors', 'length', 'width', 'landArea', 'buildingArea', 'toilets', 'imb', 'shm', 'tileSize', 'tileColor', 'buildingCover']
   const optionalFields = ['rentPrice', 'annualRent']
@@ -371,13 +380,20 @@ function ReportPage({ data }) {
     }
   }
 
+  function returnToMainMenu() {
+    sessionStorage.setItem('projectxlc-authenticated', 'true')
+    sessionStorage.setItem('projectxlc-username', data.user || 'USER')
+    sessionStorage.setItem('projectxlc-role', sessionStorage.getItem('projectxlc-role') || 'user')
+    sessionStorage.removeItem('projectxlc-report-preview')
+    window.location.assign(window.location.pathname)
+  }
+
   function closeReportAndClear() {
     if (!window.confirm('Kembali ke menu utama dan hapus semua isian?')) return
 
     if (!window.opener || window.opener.closed) {
       removeUserBuildingDraft(data.user)
-      sessionStorage.removeItem('projectxlc-report-preview')
-      window.location.assign(window.location.pathname)
+      returnToMainMenu()
       return
     }
 
@@ -387,7 +403,7 @@ function ReportPage({ data }) {
     sessionStorage.removeItem('projectxlc-report-preview')
     const timeoutId = window.setTimeout(() => {
       window.removeEventListener('message', handleClearResult)
-      window.location.assign(window.location.pathname)
+      returnToMainMenu()
     }, 2000)
 
     function handleClearResult(event) {
@@ -475,8 +491,10 @@ function ReportPage({ data }) {
   )
 }
 
-function MainMenu({ username, form, submittedCount, onOpenForm, onOpenDraft, onOpenSubmitted, onPreview, onLogout }) {
-  const hasDraft = Boolean(form.buildingName || form.address)
+function MainMenu({ username, form, draftCount, submittedCount, previewCount, onOpenForm, onOpenDraft, onOpenSubmitted, onPreview, onLogout }) {
+  const filledFieldCount = countFilledFormFields(form)
+  const totalFieldCount = Object.keys(initialForm).length
+  const hasDraft = draftCount > 0
 
   return (
     <main className="app-shell main-menu-shell">
@@ -485,14 +503,50 @@ function MainMenu({ username, form, submittedCount, onOpenForm, onOpenDraft, onO
       <section className="main-menu-content" aria-label="Menu utama">
         <div className="main-menu-heading"><div><p className="kicker">Pilih aktivitas</p><h2>PROPERTY INTAKE</h2></div><button type="button" className="logout-button" onClick={onLogout}>SIGNOUT</button></div>
         <div className="main-menu-actions">
-          <button type="button" className="main-menu-action secondary form-action-card" onClick={onOpenForm}><span className="main-menu-index">01 / FORM</span><strong>FORM</strong><span className="main-menu-arrow" aria-hidden="true">→</span></button>
-          <button type="button" className="main-menu-action secondary draft-action-card" onClick={onOpenDraft}><span className="main-menu-index">02 / DRAFT</span><strong>DRAFT</strong><span className="main-menu-arrow" aria-hidden="true">↗</span></button>
-          <button type="button" className="main-menu-action secondary submitted-action-card" onClick={onOpenSubmitted}><span className="main-menu-index">03 / HISTORY</span><strong>SUBMITTED</strong><span className="main-menu-count">{submittedCount}</span></button>
-          <button type="button" className="main-menu-action secondary preview-action-card" onClick={onPreview}><span className="main-menu-index">04 / REPORT</span><strong>PREVIEW</strong><span className="main-menu-arrow" aria-hidden="true">↗</span></button>
+          <button type="button" className="main-menu-action secondary form-action-card" onClick={onOpenForm}><span className="main-menu-index">01 / FORM</span><strong>FORM</strong><span className="main-menu-count" aria-label={`${filledFieldCount} dari ${totalFieldCount} field terisi`}>{filledFieldCount}/{totalFieldCount}</span></button>
+          <button type="button" className="main-menu-action secondary draft-action-card" onClick={onOpenDraft}><span className="main-menu-index">02 / DRAFT</span><strong>DRAFT</strong><span className="main-menu-count" aria-label={`${draftCount} draft tersimpan`}>{draftCount}</span></button>
+          <button type="button" className="main-menu-action secondary submitted-action-card" onClick={onOpenSubmitted}><span className="main-menu-index">03 / HISTORY</span><strong>SUBMITTED</strong><span className="main-menu-count" aria-label={`${submittedCount} data disubmit`}>{submittedCount}</span></button>
+          <button type="button" className="main-menu-action secondary preview-action-card" onClick={onPreview}><span className="main-menu-index">04 / REPORT</span><strong>PREVIEW</strong><span className="main-menu-count" aria-label={`${previewCount} report tersedia`}>{previewCount}</span></button>
         </div>
         {hasDraft ? <div className="main-menu-draft"><span>Proposal terakhir</span><strong>{form.buildingName || 'Nama bangunan belum diisi'}</strong><span>{form.address || 'Alamat belum diisi'}</span></div> : null}
       </section>
       <footer className="app-footer"><span>PROJECTXLC</span><span>Property Intake</span></footer>
+    </main>
+  )
+}
+
+function DraftPage({ username, draft, onBack, onEdit, onPreview }) {
+  if (!draft) {
+    return <main className="app-shell main-menu-shell"><header className="app-header"><div className="brand-mark">XLC<span>•</span></div><button type="button" className="preview-button" onClick={onBack}>Main Menu</button></header><section className="main-menu-intro"><p className="kicker">PROJECT XLC / DRAFT</p><h1>Belum ada draft</h1><button type="button" className="preview-button" onClick={onEdit}>FORM</button></section></main>
+  }
+
+  return (
+    <main className="app-shell main-menu-shell">
+      <header className="app-header"><div><div className="brand-mark">XLC<span>•</span></div><p className="kicker">PROJECT XLC / DRAFT DATA</p></div><button type="button" className="preview-button" onClick={onBack}>Main Menu</button></header>
+      <section className="main-menu-intro"><p className="kicker">DRAFT / {username}</p><h1>{draft.buildingName || 'Tanpa nama bangunan'}</h1></section>
+      <section className="report-meta" aria-label="Informasi draft"><div><small>User</small><strong>{draft.submittedBy || username}</strong></div><div><small>Terakhir disimpan</small><strong>{draft.submittedAt ? new Date(draft.submittedAt).toLocaleString('id-ID') : '-'}</strong></div></section>
+      <div className="report-sections">
+        {reportSections.map((section) => <section className="report-section" key={section.title}><div className="report-section-heading"><p className="kicker">Draft data</p><h2>{section.title}</h2></div><dl className="report-grid">{section.fields.map(([key, label]) => { const value = draft[key]; const displayValue = ['rentPrice', 'annualRent'].includes(key) && value !== '' && value != null ? formatPriceValue(value) : value || '-'; return <div key={key}><dt>{label}</dt><dd>{displayValue}</dd></div> })}</dl></section>)}
+        <section className="report-section"><div className="report-section-heading"><p className="kicker">Visual documentation</p><h2>Upload foto</h2></div><div className="report-photo-grid">{[['front', 'Tampak depan bangunan'], ['groundFloor', 'Tampak dalam lantai dasar'], ['upperFloor', 'Tampak dalam lantai atas']].map(([key, label]) => { const photo = draft.photoFiles?.[key]; return <figure className="report-photo-card" key={key}><div className="report-photo-frame">{photo?.dataUrl ? <img src={photo.dataUrl} alt={label} /> : <span>{draft.photoNames?.[key] || 'Foto belum diunggah'}</span>}</div><figcaption><strong>{label}</strong><span>{photo?.name || draft.photoNames?.[key] || '-'}</span></figcaption></figure> })}</div></section>
+      </div>
+      <div className="submitted-page-actions"><button type="button" className="preview-button" onClick={onEdit}>EDIT DRAFT</button><button type="button" className="preview-button" onClick={() => onPreview(draft)}>PREVIEW</button></div>
+    </main>
+  )
+}
+
+function PreviewPage({ username, currentReport, submissions, onBack, onPreview }) {
+  const reports = [
+    ...(currentReport ? [{ ...currentReport, reportType: 'DRAFT' }] : []),
+    ...submissions.map((submission) => ({ ...submission, reportType: 'SUBMITTED' })),
+  ]
+
+  return (
+    <main className="app-shell main-menu-shell">
+      <header className="app-header"><div><div className="brand-mark">XLC<span>•</span></div><p className="kicker">PROJECT XLC / REPORT PREVIEW</p></div><button type="button" className="preview-button" onClick={onBack}>Main Menu</button></header>
+      <section className="main-menu-intro"><p className="kicker">PREVIEW / {username}</p><h1>REPORTS</h1><p className="intro-copy">{reports.length} report tersedia</p></section>
+      <section className="submitted-list" aria-label="Reports available to preview">
+        {reports.length ? reports.map((report) => <article className="admin-data-panel submitted-item" key={`${report.reportType}-${report.submittedAt}`}><div className="admin-panel-heading"><div><p className="kicker">{report.reportType} / {report.submittedAt ? new Date(report.submittedAt).toLocaleString('id-ID') : 'Belum disimpan'}</p><h2>{report.form?.buildingName || 'Tanpa nama bangunan'}</h2></div><span>{report.reportType}</span></div><div className="admin-data-grid"><div><small>Alamat</small><strong>{report.form?.address || '-'}</strong></div><div><small>Harga sewa</small><strong>{report.form?.rentPrice ? formatPriceValue(report.form.rentPrice) : '-'}</strong></div></div><button type="button" className="preview-button submitted-preview-button" onClick={() => onPreview(report)}>PREVIEW</button></article>) : <div className="admin-empty"><strong>Belum ada report</strong><span>Simpan draft atau submit formulir untuk membuat report.</span></div>}
+      </section>
     </main>
   )
 }
@@ -621,6 +675,8 @@ function App() {
   })
   const [form, setForm] = useState(initialForm)
   const [activePage, setActivePage] = useState(() => new URLSearchParams(window.location.search).get('form') === '1' ? 'form' : 'mainmenu')
+  const [draftExists, setDraftExists] = useState(false)
+  const [draftData, setDraftData] = useState(null)
   const [submittedRecords, setSubmittedRecords] = useState(() => getUserSubmissions(username))
   const [photos, setPhotos] = useState({ front: null, groundFloor: null, upperFloor: null })
   const [saved, setSaved] = useState(false)
@@ -631,7 +687,7 @@ function App() {
   const reportSubmitSource = useRef(null)
 
   function openReportPage(submission = null) {
-    const reportForm = submission?.form || form
+    const reportForm = submission?.form || (submission?.buildingName || submission?.address ? submission : form)
     const dateTimeData = submission?.submittedAt || new Date().toISOString()
     const googleMapsLink = submission?.googleMapsLink || (reportForm.latitude && reportForm.longitude ? `https://www.google.com/maps?q=${reportForm.latitude},${reportForm.longitude}` : 'https://www.google.com/maps')
     const photoNames = submission?.photoNames || Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || '']))
@@ -663,7 +719,7 @@ function App() {
   }
 
   function openDraftPage() {
-    openFormPage()
+    setActivePage('draft')
   }
 
   function openSubmittedPage() {
@@ -671,14 +727,18 @@ function App() {
   }
 
   function previewFromMenu() {
-    setActivePage('form')
-    openReportPage()
+    setActivePage('preview')
   }
 
   useEffect(() => {
     const draft = getUserBuildingDraft(username)
+    setDraftExists(Boolean(draft))
+    setDraftData(draft)
     setForm({ ...initialForm, ...(draft || {}) })
-    setPhotos({ front: null, groundFloor: null, upperFloor: null })
+    setPhotos(Object.fromEntries(['front', 'groundFloor', 'upperFloor'].map((name) => {
+      const photo = draft?.photoFiles?.[name]
+      return [name, photo ? { ...photo, url: photo.dataUrl } : null]
+    })))
     setLastSaved(draft?.submittedAt || null)
     setSaved(false)
     setSaveMessage('')
@@ -691,6 +751,7 @@ function App() {
       if (event.data?.type === 'projectxl:report-close-clear') {
         setForm(initialForm)
         setActivePage('mainmenu')
+        setDraftExists(false)
         setPhotos({ front: null, groundFloor: null, upperFloor: null })
         setLastSaved(null)
         setSaved(false)
@@ -717,11 +778,22 @@ function App() {
     return () => window.removeEventListener('message', handleReportSubmit)
   }, [username])
 
+  const currentReport = draftData || countFilledFormFields(form) > 0 ? {
+    form,
+    photoNames: Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || ''])),
+    photoFiles: Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo ? { name: photo.name, type: photo.type, dataUrl: photo.dataUrl } : null])),
+    googleMapsLink: form.latitude && form.longitude ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}` : 'https://www.google.com/maps',
+    submittedAt: draftData?.submittedAt || lastSaved || new Date().toISOString(),
+    submittedBy: username,
+  } : null
+
   if (reportMode) return <ReportPage data={reportData} />
   if (!authenticated) return <LoginScreen onLogin={handleLogin} />
   if (role === 'admin') return <AdminDashboard username={username} onLogout={handleLogout} />
+  if (activePage === 'draft') return <DraftPage username={username} draft={draftData} onBack={() => setActivePage('mainmenu')} onEdit={openFormPage} onPreview={openReportPage} />
+  if (activePage === 'preview') return <PreviewPage username={username} currentReport={currentReport} submissions={submittedRecords} onBack={() => setActivePage('mainmenu')} onPreview={openReportPage} />
   if (activePage === 'submitted') return <SubmittedPage username={username} submissions={submittedRecords} onBack={() => setActivePage('mainmenu')} onPreview={openReportPage} />
-  if (activePage === 'mainmenu') return <MainMenu username={username} form={form} submittedCount={submittedRecords.length} onOpenForm={openFormPage} onOpenDraft={openDraftPage} onOpenSubmitted={openSubmittedPage} onPreview={previewFromMenu} onLogout={handleLogout} />
+  if (activePage === 'mainmenu') return <MainMenu username={username} form={form} draftCount={draftExists ? 1 : 0} submittedCount={submittedRecords.length} previewCount={submittedRecords.length + (draftExists || countFilledFormFields(form) > 0 ? 1 : 0)} onOpenForm={openFormPage} onOpenDraft={openDraftPage} onOpenSubmitted={openSubmittedPage} onPreview={previewFromMenu} onLogout={handleLogout} />
 
   function handleChange(event) {
     const { name, value } = event.target
@@ -782,6 +854,7 @@ function App() {
     const submittedRecord = { form: normalizedForm, photoNames, googleMapsLink, submittedAt, submittedBy: username }
     setSubmittedRecords(saveUserSubmission(username, submittedRecord))
     localStorage.setItem(getUserBuildingDraftKey(username), JSON.stringify({ ...normalizedForm, photoNames, googleMapsLink, submittedAt, submittedBy: username }))
+    setDraftExists(true)
     setLastSaved(submittedAt)
     setSaved(true)
     setSaveMessage(googleSheetsUrl ? 'Mengirim data ke Google Sheets...' : 'Draft tersimpan di perangkat. Hubungkan Google Sheets untuk sinkronisasi.')
@@ -806,6 +879,7 @@ function App() {
     const photoNames = Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || '']))
     const googleMapsLink = form.latitude && form.longitude ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}` : 'https://www.google.com/maps'
     localStorage.setItem(getUserBuildingDraftKey(username), JSON.stringify({ ...form, photoNames, googleMapsLink, submittedAt: savedAt, submittedBy: username }))
+    setDraftExists(true)
     setLastSaved(savedAt)
     setSaved(true)
     setSaveMessage('Draft tersimpan di perangkat.')
@@ -818,6 +892,7 @@ function App() {
       setLastSaved(null)
       setSaved(false)
       setSaveMessage('')
+      setDraftExists(false)
       removeUserBuildingDraft(username)
     }
   }

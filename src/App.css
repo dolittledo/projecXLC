@@ -63,7 +63,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .main-menu-action.preview-action-card { border-color: #efd7ce; background: #f8e8e2; }
 .main-menu-index { color: var(--muted); font-size: .68rem; font-weight: 800; text-transform: uppercase; }
 .main-menu-action strong { position: absolute; top: 50%; left: 22px; width: calc(100% - 44px); transform: translateY(-50%); font-size: 1.25rem; }
-.main-menu-arrow { position: absolute; right: 22px; bottom: 20px; color: var(--orange); font-size: 1.35rem; }
 .main-menu-count { position: absolute; right: 22px; bottom: 20px; color: var(--moss); font-size: .82rem; font-weight: 800; }
 .main-menu-draft { display: flex; max-width: 920px; flex-wrap: wrap; align-items: baseline; gap: 8px 18px; margin-top: 24px; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: .8rem; }
 .main-menu-draft > span:first-child { width: 100%; color: var(--muted); font-size: .68rem; font-weight: 800; text-transform: uppercase; }
