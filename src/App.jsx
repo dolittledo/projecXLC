@@ -492,7 +492,6 @@ function ReportPage({ data }) {
 }
 
 function MainMenu({ username, form, draftCount, submittedCount, previewCount, onOpenForm, onOpenDraft, onOpenSubmitted, onPreview, onLogout }) {
-  const filledFieldCount = countFilledFormFields(form)
   const totalFieldCount = Object.keys(initialForm).length
   const hasDraft = draftCount > 0
 
@@ -503,7 +502,7 @@ function MainMenu({ username, form, draftCount, submittedCount, previewCount, on
       <section className="main-menu-content" aria-label="Menu utama">
         <div className="main-menu-heading"><div><p className="kicker">Pilih aktivitas</p><h2>PROPERTY INTAKE</h2></div><button type="button" className="logout-button" onClick={onLogout}>SIGNOUT</button></div>
         <div className="main-menu-actions">
-          <button type="button" className="main-menu-action secondary form-action-card" onClick={onOpenForm}><span className="main-menu-index">01 / FORM</span><strong>FORM</strong><span className="main-menu-count" aria-label={`${filledFieldCount} dari ${totalFieldCount} field terisi`}>{filledFieldCount}/{totalFieldCount}</span></button>
+          <button type="button" className="main-menu-action secondary form-action-card" onClick={onOpenForm}><span className="main-menu-index">01 / FORM</span><strong>FORM</strong><span className="main-menu-count" aria-label={`${totalFieldCount} field formulir`}>{totalFieldCount}</span></button>
           <button type="button" className="main-menu-action secondary draft-action-card" onClick={onOpenDraft}><span className="main-menu-index">02 / DRAFT</span><strong>DRAFT</strong><span className="main-menu-count" aria-label={`${draftCount} draft tersimpan`}>{draftCount}</span></button>
           <button type="button" className="main-menu-action secondary submitted-action-card" onClick={onOpenSubmitted}><span className="main-menu-index">03 / HISTORY</span><strong>SUBMITTED</strong><span className="main-menu-count" aria-label={`${submittedCount} data disubmit`}>{submittedCount}</span></button>
           <button type="button" className="main-menu-action secondary preview-action-card" onClick={onPreview}><span className="main-menu-index">04 / REPORT</span><strong>PREVIEW</strong><span className="main-menu-count" aria-label={`${previewCount} report tersedia`}>{previewCount}</span></button>
