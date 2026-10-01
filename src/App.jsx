@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
 const googleSheetsUrl = import.meta.env.VITE_GOOGLE_SHEETS_URL || ''
+const legacyBuildingDraftKey = 'projectxlc-building-form'
+const userBuildingDraftPrefix = `${legacyBuildingDraftKey}:`
 
 const initialForm = {
   buildingName: '', address: '', floors: '', length: '', width: '', landArea: '', buildingArea: '', toilets: '', imb: '', shm: '', tileSize: '', tileColor: 'Krem', buildingCover: '',
@@ -39,6 +41,69 @@ function getAccounts() {
     return JSON.parse(storedAccounts)
   } catch {
     return accounts
+  }
+}
+
+function getUserBuildingDraftKey(username) {
+  const normalizedUsername = String(username || 'USER').trim().toUpperCase()
+  return `${userBuildingDraftPrefix}${encodeURIComponent(normalizedUsername)}`
+}
+
+function getUserBuildingDraft(username) {
+  const userKey = getUserBuildingDraftKey(username)
+  const userDraft = localStorage.getItem(userKey)
+  if (userDraft) {
+    try {
+      return JSON.parse(userDraft)
+    } catch {
+      return null
+    }
+  }
+
+  const legacyDraft = localStorage.getItem(legacyBuildingDraftKey)
+  if (!legacyDraft) return null
+  try {
+    const parsedDraft = JSON.parse(legacyDraft)
+    const owner = String(parsedDraft.submittedBy || '').trim().toUpperCase()
+    if (owner && owner !== String(username || 'USER').trim().toUpperCase()) return null
+    localStorage.setItem(userKey, legacyDraft)
+    localStorage.removeItem(legacyBuildingDraftKey)
+    return parsedDraft
+  } catch {
+    return null
+  }
+}
+
+function getSavedBuildingDrafts() {
+  const draftKeys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index))
+    .filter((key) => key?.startsWith(userBuildingDraftPrefix))
+  const drafts = draftKeys.flatMap((key) => {
+    try {
+      return [JSON.parse(localStorage.getItem(key))]
+    } catch {
+      return []
+    }
+  })
+  const legacyDraft = localStorage.getItem(legacyBuildingDraftKey)
+  if (legacyDraft) {
+    try {
+      drafts.push(JSON.parse(legacyDraft))
+    } catch {
+      // Ignore malformed legacy draft data.
+    }
+  }
+  return drafts.sort((left, right) => new Date(right.submittedAt || 0) - new Date(left.submittedAt || 0))
+}
+
+function removeUserBuildingDraft(username) {
+  localStorage.removeItem(getUserBuildingDraftKey(username))
+  const legacyDraft = localStorage.getItem(legacyBuildingDraftKey)
+  if (!legacyDraft) return
+  try {
+    const owner = String(JSON.parse(legacyDraft).submittedBy || '').trim().toUpperCase()
+    if (!owner || owner === String(username || 'USER').trim().toUpperCase()) localStorage.removeItem(legacyBuildingDraftKey)
+  } catch {
+    localStorage.removeItem(legacyBuildingDraftKey)
   }
 }
 
@@ -161,7 +226,7 @@ function ReportPage({ data }) {
   const [isClosing, setIsClosing] = useState(false)
 
   if (!data?.form) {
-    return <main className="preview-page"><header className="app-header"><div className="brand-mark">XLC<span>•</span></div></header><section className="preview-intro"><p className="kicker">PROJECT XLC / REPORT</p><h1>Data laporan<br /><em>tidak tersedia.</em></h1><p className="intro-copy">Buka laporan dari tombol Preview Data pada formulir.</p></section></main>
+    return <main className="preview-page"><header className="app-header"><div className="brand-mark">XLC<span>•</span></div></header><section className="preview-intro"><p className="kicker">PROJECT XLC / REPORT</p><h1>Data laporan<br /><em>tidak tersedia.</em></h1><p className="intro-copy">Buka laporan dari tombol PREVIEW pada formulir.</p></section></main>
   }
 
   const dateTime = new Date(data.dateTimeData)
@@ -272,7 +337,7 @@ function ReportPage({ data }) {
     if (!window.confirm('Kembali ke formulir dan hapus semua isian?')) return
 
     if (!window.opener || window.opener.closed) {
-      localStorage.removeItem('projectxlc-building-form')
+      removeUserBuildingDraft(data.user)
       sessionStorage.removeItem('projectxlc-report-preview')
       window.location.assign(window.location.pathname)
       return
@@ -364,6 +429,26 @@ function ReportPage({ data }) {
   )
 }
 
+function MainMenu({ username, form, onOpenForm, onPreview, onLogout }) {
+  const hasDraft = Boolean(form.buildingName || form.address)
+
+  return (
+    <main className="app-shell main-menu-shell">
+      <header className="app-header"><div className="brand-mark">XLC<span>•</span></div><div className="main-menu-header-actions"><span className="header-meta">Main Menu / {username}</span><button type="button" className="logout-button" onClick={onLogout}>Keluar</button></div></header>
+      <section className="main-menu-intro"><p className="kicker">PROJECT XLC / WORKSPACE</p><h1>Selamat datang,<br /><em>{username}.</em></h1><p className="intro-copy">{form.buildingName ? `Lanjutkan proposal ${form.buildingName}.` : 'Mulai proposal bangunan baru.'}</p></section>
+      <section className="main-menu-content" aria-label="Menu utama">
+        <div className="main-menu-heading"><div><p className="kicker">Pilih aktivitas</p><h2>PROPERTY INTAKE</h2></div><span className={hasDraft ? 'main-menu-status ready' : 'main-menu-status'}>{hasDraft ? 'Draft tersedia' : 'Belum ada draft'}</span></div>
+        <div className="main-menu-actions">
+          <button type="button" className="main-menu-action primary" onClick={onOpenForm}><span className="main-menu-index">01 / FORM</span><strong>{hasDraft ? 'Lanjutkan isian' : 'Isi formulir'}</strong><span className="main-menu-arrow" aria-hidden="true">→</span></button>
+          <button type="button" className="main-menu-action secondary" onClick={onPreview}><span className="main-menu-index">02 / REPORT</span><strong>PREVIEW</strong><span className="main-menu-arrow" aria-hidden="true">↗</span></button>
+        </div>
+        {hasDraft ? <div className="main-menu-draft"><span>Proposal terakhir</span><strong>{form.buildingName || 'Nama bangunan belum diisi'}</strong><span>{form.address || 'Alamat belum diisi'}</span></div> : null}
+      </section>
+      <footer className="app-footer"><span>PROJECTXLC</span><span>Property Intake</span></footer>
+    </main>
+  )
+}
+
 function AdminUserControls({ action, accountsList, form, setForm, error, onSubmit, onEdit, onDelete, onToggleStatus }) {
   if (action === 'list') return <div className="admin-data-panel user-panel inline-status-panel"><div className="admin-panel-heading"><div><p className="kicker">Account directory</p><h2>User & role</h2></div></div><div className="user-list">{accountsList.map((account) => <div className="user-row" key={account.username}><div className="user-avatar">{account.username.charAt(0)}</div><div><strong>{account.name || account.username}</strong><span>{account.email || account.username}</span></div><b className={account.role === 'admin' ? 'role-badge admin' : 'role-badge'}>{account.role}</b><b className={account.active ? 'status-badge active' : 'status-badge inactive'}>{account.active ? 'ACTIVE' : 'INACTIVE'}</b><div className="status-actions"><button type="button" className="activate-button" disabled={account.active} onClick={() => onToggleStatus(account.username, true)}>Activate</button><button type="button" className="delete-button" disabled={!account.active} onClick={() => onToggleStatus(account.username, false)}>Deactivate</button></div></div>)}</div></div>
   if (action === 'activate' || action === 'deactivate') return <div className="admin-user-controls"><p className="kicker">{action === 'activate' ? 'Activate account' : 'Deactivate account'}</p><h2>{action === 'activate' ? 'Aktifkan user' : 'Nonaktifkan user'}</h2><div className="admin-delete-list">{accountsList.filter((account) => action === 'activate' ? !account.active : account.active).map((account) => <div className="admin-delete-row" key={account.username}><span>{account.name || account.username} <small>{account.username} / {account.role}</small></span><button type="button" className={action === 'activate' ? 'activate-button' : 'delete-button'} onClick={() => onToggleStatus(account.username, action === 'activate')}>{action === 'activate' ? 'Activate' : 'Deactivate'}</button></div>)}</div>{error ? <p className="login-error">{error}</p> : null}</div>
@@ -384,10 +469,8 @@ function AdminRolePanel() {
 function AdminDashboard({ username, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('data')
   const [userAction, setUserAction] = useState('list')
-  const [savedData] = useState(() => {
-    const draft = localStorage.getItem('projectxlc-building-form')
-    return draft ? JSON.parse(draft) : null
-  })
+  const [savedDrafts] = useState(getSavedBuildingDrafts)
+  const savedData = savedDrafts[0] || null
 
   const [userAccounts, setUserAccounts] = useState(() => Object.entries(getAccounts()).map(([accountUsername, account]) => ({ username: accountUsername, ...account, active: account.active !== false })))
     const [userForm, setUserForm] = useState({ name: '', email: '', ktpName: '', ktpData: '', username: '', password: '', role: 'user' })
@@ -471,6 +554,7 @@ function App() {
     }
   })
   const [form, setForm] = useState(initialForm)
+  const [activePage, setActivePage] = useState('mainmenu')
   const [photos, setPhotos] = useState({ front: null, groundFloor: null, upperFloor: null })
   const [saved, setSaved] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
@@ -492,6 +576,7 @@ function App() {
     sessionStorage.setItem('projectxlc-authenticated', 'true')
     sessionStorage.setItem('projectxlc-username', username)
     sessionStorage.setItem('projectxlc-role', role)
+    setActivePage('mainmenu')
     setAuthenticated(true)
   }
 
@@ -499,13 +584,28 @@ function App() {
     sessionStorage.removeItem('projectxlc-authenticated')
     sessionStorage.removeItem('projectxlc-username')
     sessionStorage.removeItem('projectxlc-role')
+    setActivePage('mainmenu')
     setAuthenticated(false)
   }
 
+  function openFormPage() {
+    setActivePage('form')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function previewFromMenu() {
+    setActivePage('form')
+    openReportPage()
+  }
+
   useEffect(() => {
-    const draft = localStorage.getItem('projectxlc-building-form')
-    if (draft) setForm({ ...initialForm, ...JSON.parse(draft) })
-  }, [])
+    const draft = getUserBuildingDraft(username)
+    setForm({ ...initialForm, ...(draft || {}) })
+    setPhotos({ front: null, groundFloor: null, upperFloor: null })
+    setLastSaved(draft?.submittedAt || null)
+    setSaved(false)
+    setSaveMessage('')
+  }, [username])
 
   useEffect(() => {
     function handleReportSubmit(event) {
@@ -517,7 +617,7 @@ function App() {
         setSaved(false)
         setSaveMessage('')
         setLocationError('')
-        localStorage.removeItem('projectxlc-building-form')
+        removeUserBuildingDraft(username)
         sessionStorage.removeItem('projectxlc-report-preview')
         window.scrollTo({ top: 0, behavior: 'smooth' })
         event.source?.postMessage({ type: 'projectxl:report-close-clear-result', ok: true }, event.origin)
@@ -536,11 +636,12 @@ function App() {
 
     window.addEventListener('message', handleReportSubmit)
     return () => window.removeEventListener('message', handleReportSubmit)
-  }, [])
+  }, [username])
 
   if (reportMode) return <ReportPage data={reportData} />
   if (!authenticated) return <LoginScreen onLogin={handleLogin} />
   if (role === 'admin') return <AdminDashboard username={username} onLogout={handleLogout} />
+  if (activePage === 'mainmenu') return <MainMenu username={username} form={form} onOpenForm={openFormPage} onPreview={previewFromMenu} onLogout={handleLogout} />
 
   function handleChange(event) {
     const { name, value } = event.target
@@ -598,7 +699,7 @@ function App() {
       photoFiles,
       googleMapsLink,
     }
-    localStorage.setItem('projectxlc-building-form', JSON.stringify({ ...normalizedForm, photoNames, googleMapsLink, submittedAt, submittedBy: username }))
+    localStorage.setItem(getUserBuildingDraftKey(username), JSON.stringify({ ...normalizedForm, photoNames, googleMapsLink, submittedAt, submittedBy: username }))
     setLastSaved(submittedAt)
     setSaved(true)
     setSaveMessage(googleSheetsUrl ? 'Mengirim data ke Google Sheets...' : 'Draft tersimpan di perangkat. Hubungkan Google Sheets untuk sinkronisasi.')
@@ -618,20 +719,31 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  function saveDraft() {
+    const savedAt = new Date().toISOString()
+    const photoNames = Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || '']))
+    const googleMapsLink = form.latitude && form.longitude ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}` : 'https://www.google.com/maps'
+    localStorage.setItem(getUserBuildingDraftKey(username), JSON.stringify({ ...form, photoNames, googleMapsLink, submittedAt: savedAt, submittedBy: username }))
+    setLastSaved(savedAt)
+    setSaved(true)
+    setSaveMessage('Draft tersimpan di perangkat.')
+  }
+
   function clearForm() {
     if (window.confirm('Hapus semua isian formulir?')) {
       setForm(initialForm)
       setPhotos({ front: null, groundFloor: null, upperFloor: null })
       setLastSaved(null)
       setSaved(false)
-      localStorage.removeItem('projectxlc-building-form')
+      setSaveMessage('')
+      removeUserBuildingDraft(username)
     }
   }
 
   return (
     <main className="app-shell">
       <header className="app-header"><div className="brand-mark">XLC<span>•</span></div><div className="header-meta"><span className="live-dot" /> Form proposal gedung / {role}</div></header>
-      <section className="intro"><div className="welcome-row"><p className="welcome-message">Selamat Datang, {username}</p><div className="welcome-actions"><button type="button" className="logout-button" onClick={handleLogout}>Keluar</button><button type="button" className="preview-button welcome-preview-button" onClick={openReportPage}>Preview Data</button></div></div><p className="kicker">PROJECT XLC / PROPERTY INTAKE</p><h1>Proposal bangunan<br /><em>siap ditinjau.</em></h1><p className="intro-copy">Lengkapi detail properti untuk membantu tim menilai lokasi, biaya, dan kesiapan gedung.</p><div className="progress-line"><span /><span /><span /><span /><span /></div></section>
+      <section className="intro"><div className="welcome-row"><p className="welcome-message">Selamat Datang, {username}</p><div className="welcome-actions"><button type="button" className="preview-button" onClick={() => setActivePage('mainmenu')}>Main Menu</button><button type="button" className="logout-button" onClick={handleLogout}>Keluar</button><button type="button" className="preview-button welcome-preview-button" onClick={openReportPage}>PREVIEW</button></div></div><p className="kicker">PROJECT XLC / PROPERTY INTAKE</p><h1>Proposal bangunan<br /><em>siap ditinjau.</em></h1><p className="intro-copy">Lengkapi detail properti untuk membantu tim menilai lokasi, biaya, dan kesiapan gedung.</p><div className="progress-line"><span /><span /><span /><span /><span /></div></section>
       {saved ? <div className="success-banner" role="status"><strong>Data tersimpan.</strong> {saveMessage}</div> : null}
       <form ref={formRef} onSubmit={handleSubmit}>
         <section className="form-section" id="building"><div className="section-title"><span>01</span><div><p className="kicker">Property profile</p><h2>Data bangunan</h2><p>Identitas dasar dan kondisi fisik properti.</p></div></div><div className="field-grid">
@@ -643,8 +755,7 @@ function App() {
         <section className="form-section" id="other"><div className="section-title"><span>05</span><div><p className="kicker">Finishing & inventory</p><h2>Lain-lain</h2><p>Renovasi dan inventaris yang sudah tersedia.</p></div></div><div className="field-grid"><Field label="Perlu renovasi?" name="needsRenovation" value={form.needsRenovation} onChange={handleChange} options={['Tidak', 'Ya', 'Belum diketahui']} />{form.needsRenovation === 'Ya' ? <Field label="Jenis renovasi" name="renovationType" value={form.renovationType} onChange={handleChange} type="textarea" placeholder="Jelaskan kebutuhan renovasi" /> : null}<Field label="Pemilik bersedia mencat dinding dalam" name="paintInside" value={form.paintInside} onChange={handleChange} options={['Ya', 'Tidak', 'Tidak diketahui']} /><Field label="Pemilik bersedia mencat dinding luar" name="paintOutside" value={form.paintOutside} onChange={handleChange} options={['Ya', 'Tidak', 'Tidak diketahui']} /><Field label="Pemilik bersedia general cleaning" name="generalCleaning" value={form.generalCleaning} onChange={handleChange} options={['Ya', 'Tidak', 'Tidak diketahui']} /><Field label="Pemilik bersedia mengganti keramik sesuai standard XLC" name="replaceTiles" value={form.replaceTiles} onChange={handleChange} options={['Ya', 'Tidak', 'Tidak diketahui']} /></div><div className="inventory-heading"><p className="kicker">Jika sudah tersedia di gedung yang dipropose</p><h3>Inventaris gedung</h3></div><div className="field-grid inventory-grid"><Field label="Jumlah AC" name="ac" value={form.ac} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah kipas angin" name="fans" value={form.fans} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah infocus monitor" name="infocus" value={form.infocus} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah TV" name="tv" value={form.tv} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah dispenser" name="dispenser" value={form.dispenser} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah papan tulis" name="whiteboard" value={form.whiteboard} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah meja" name="tables" value={form.tables} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah kursi" name="chairs" value={form.chairs} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah galon" name="gallons" value={form.gallons} onChange={handleChange} type="number" placeholder="0" /></div></section>
         <section className="form-section photo-section" id="photos"><div className="section-title"><span>06</span><div><p className="kicker">Visual documentation</p><h2>Upload Foto</h2><p>Tambahkan foto kondisi aktual bangunan.</p></div></div><div className="photo-grid"><PhotoUpload label="Tampak Depan Bangunan" photo={photos.front} onChange={(event) => handlePhotoChange('front', event)} /><PhotoUpload label="Tampak Dalam Lantai Dasar" photo={photos.groundFloor} onChange={(event) => handlePhotoChange('groundFloor', event)} /><PhotoUpload label="Tampak Dalam Lantai Atas" photo={photos.upperFloor} onChange={(event) => handlePhotoChange('upperFloor', event)} /></div></section>
         <section className="form-section coordinates-section" id="coordinates"><div className="section-title"><span>07</span><div><p className="kicker">Location capture</p><h2>Lokasi bangunan</h2><p>Ambil koordinat perangkat dan buka titiknya di Google Maps.</p></div></div><div className="location-actions"><button type="button" className="preview-button" onClick={captureLocation}>Ambil lokasi saya</button>{locationError ? <span className="location-message">{locationError}</span> : null}</div><div className="field-grid"><Field label="Latitude" name="latitude" value={form.latitude} onChange={handleChange} placeholder="Contoh: -6.207450" required={false} /><Field label="Longitude" name="longitude" value={form.longitude} onChange={handleChange} placeholder="Contoh: 106.714135" required={false} /></div><iframe className="map-frame" title="Google Maps lokasi bangunan" src={form.latitude && form.longitude ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}&output=embed` : 'https://www.google.com/maps?q=Indonesia&output=embed'} loading="lazy" referrerPolicy="no-referrer-when-downgrade" /></section>
-        <div className="preview-menu"><button type="button" className="preview-button" onClick={openReportPage}>Preview Data</button></div>
-        <div className="form-actions"><button type="button" className="text-button" onClick={clearForm}>Hapus isian</button></div>
+        <div className="form-actions"><button type="button" className="preview-button" onClick={openReportPage}>PREVIEW</button><button type="button" className="preview-button" onClick={saveDraft}>SAVE</button><button type="button" className="preview-button" onClick={clearForm}>CLEAR</button></div>
       </form>
       <footer className="app-footer"><span>PROJECTXLC</span><span>{lastSaved ? `Terakhir disimpan ${new Date(lastSaved).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}` : 'Draft belum disimpan'}</span></footer>
     </main>
