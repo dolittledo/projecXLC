@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
 const googleSheetsUrl = import.meta.env.VITE_GOOGLE_SHEETS_URL || ''
@@ -12,6 +12,16 @@ const initialForm = {
   latitude: '', longitude: '',
   ac: '', fans: '', infocus: '', tv: '', dispenser: '', whiteboard: '', tables: '', chairs: '', gallons: '',
 }
+
+const reportSections = [
+  { title: 'Data bangunan', fields: [['buildingName', 'Nama bangunan'], ['address', 'Alamat'], ['floors', 'Jumlah lantai'], ['landArea', 'Luas tanah (m²)'], ['buildingArea', 'Luas bangunan (m²)'], ['length', 'Ukuran panjang (m)'], ['width', 'Ukuran lebar (m)'], ['toilets', 'Jumlah toilet'], ['imb', 'Kelengkapan IMB'], ['shm', 'Kelengkapan SHM'], ['tileSize', 'Ukuran keramik lantai (cm)'], ['tileColor', 'Warna keramik lantai'], ['buildingCover', 'Penutup bangunan']] },
+  { title: 'Harga sewa', fields: [['rentPrice', 'Harga sewa'], ['annualRent', 'Harga sewa per tahun'], ['contractType', 'Kontrak bulanan / tahunan'], ['contractPeriod', 'Periode kontrak (tahun)'], ['minContractPeriod', 'Min periode kontrak (tahun)'], ['maxContractPeriod', 'Maks periode kontrak (tahun)'], ['vatIncluded', 'Sudah include PPN?']] },
+  { title: 'Fasilitas', fields: [['waterSource', 'Sumber air'], ['electricity', 'Daya listrik terpasang (kWh)'], ['parkingLand', 'Ketersediaan lahan parkir'], ['parkingVehicle', 'Parkir motor / mobil'], ['parkingSubscription', 'Parkir kendaraan berlangganan?']] },
+  { title: 'Lingkungan', fields: [['buildingAreaType', 'Bangunan berada di area'], ['environment', 'Lingkungan'], ['roadAccess', 'Akses jalan'], ['surroundings', 'Situasi kondisi sekitar'], ['operatorNearest', 'Operator terdekat'], ['operatorDistance', 'Jarak dengan operator terdekat'], ['nearestBank', 'Nama bank terdekat'], ['bankDistance', 'Jarak dengan bank terdekat'], ['cityCenterNearest', 'Pusat kota terdekat'], ['cityDistance', 'Jarak dengan pusat kota terdekat'], ['aiPointDistance', 'Jarak dari titik yang disuggest tim AI']] },
+  { title: 'Kondisi dan renovasi', fields: [['needsRenovation', 'Perlu renovasi?'], ['renovationType', 'Jenis renovasi'], ['paintInside', 'Pemilik bersedia mencat dinding dalam'], ['paintOutside', 'Pemilik bersedia mencat dinding luar'], ['generalCleaning', 'Pemilik bersedia general cleaning'], ['replaceTiles', 'Pemilik bersedia mengganti keramik sesuai standard XLC']] },
+  { title: 'Inventaris gedung', fields: [['ac', 'Jumlah AC'], ['fans', 'Jumlah kipas angin'], ['infocus', 'Jumlah infocus monitor'], ['tv', 'Jumlah TV'], ['dispenser', 'Jumlah dispenser'], ['whiteboard', 'Jumlah papan tulis'], ['tables', 'Jumlah meja'], ['chairs', 'Jumlah kursi'], ['gallons', 'Jumlah galon']] },
+  { title: 'Lokasi bangunan', fields: [['latitude', 'Latitude'], ['longitude', 'Longitude']] },
+]
 
 const quantityOptions = Array.from({ length: 11 }, (_, index) => String(index))
 const floorOptions = Array.from({ length: 5 }, (_, index) => String(index))
@@ -142,6 +152,183 @@ function LoginScreen({ onLogin }) {
   return <main className="login-shell"><div className="login-orbit" /><section className="login-card"><div className="brand-mark">XLC<span>•</span></div><p className="kicker">PROJECT XLC / SECURE ACCESS</p><h1>Selamat datang<br /><em>di PROJECTXLC.</em></h1><p className="login-copy">Masuk untuk mengisi dan meninjau proposal bangunan.</p><form onSubmit={handleSubmit} className="login-form"><label className="field"><span>USERNAME</span><input autoFocus name="username" value={credentials.username} onChange={(event) => setCredentials((current) => ({ ...current, username: event.target.value }))} placeholder="Masukkan username" autoComplete="username" /></label><label className="field"><span>PASSWORD</span><input name="password" type="password" value={credentials.password} onChange={(event) => setCredentials((current) => ({ ...current, password: event.target.value }))} placeholder="Masukkan password" autoComplete="current-password" /></label>{error ? <p className="login-error" role="alert">{error}</p> : null}<button type="submit" className="login-button">PROJECTXLC <span>→</span></button></form></section></main>
 }
 
+function ReportPage({ data }) {
+  const [submitStatus, setSubmitStatus] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [pdfStatus, setPdfStatus] = useState('')
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
+
+  if (!data?.form) {
+    return <main className="preview-page"><header className="app-header"><div className="brand-mark">XLC<span>•</span></div></header><section className="preview-intro"><p className="kicker">PROJECT XLC / REPORT</p><h1>Data laporan<br /><em>tidak tersedia.</em></h1><p className="intro-copy">Buka laporan dari tombol Preview Data pada formulir.</p></section></main>
+  }
+
+  const dateTime = new Date(data.dateTimeData)
+  const formattedDate = Number.isNaN(dateTime.getTime()) ? '-' : dateTime.toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })
+
+  async function downloadReportPdf() {
+    setIsGeneratingPdf(true)
+    setPdfStatus('')
+    try {
+      const { jsPDF } = await import('jspdf')
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const margin = 17
+      const contentWidth = pageWidth - margin * 2
+      let cursorY = margin
+
+      function ensureSpace(height) {
+        if (cursorY + height > pageHeight - margin) {
+          pdf.addPage()
+          cursorY = margin
+        }
+      }
+
+      function addEntry(label, value) {
+        const labelLines = pdf.splitTextToSize(label.toUpperCase(), contentWidth)
+        const valueLines = pdf.splitTextToSize(String(value || '-'), contentWidth)
+        const entryHeight = 3.5 + labelLines.length * 3.5 + valueLines.length * 4.5 + 3
+        ensureSpace(entryHeight)
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(7.5)
+        pdf.setTextColor(94, 114, 105)
+        pdf.text(labelLines, margin, cursorY)
+        cursorY += labelLines.length * 3.5 + 1
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(10)
+        pdf.setTextColor(23, 43, 37)
+        pdf.text(valueLines, margin, cursorY)
+        cursorY += valueLines.length * 4.5 + 3
+        pdf.setDrawColor(224, 232, 225)
+        pdf.line(margin, cursorY, pageWidth - margin, cursorY)
+        cursorY += 4
+      }
+
+      function addSection(title) {
+        ensureSpace(14)
+        cursorY += 4
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(12)
+        pdf.setTextColor(35, 74, 61)
+        pdf.text(title.toUpperCase(), margin, cursorY)
+        cursorY += 3
+        pdf.setDrawColor(35, 74, 61)
+        pdf.setLineWidth(0.5)
+        pdf.line(margin, cursorY, pageWidth - margin, cursorY)
+        cursorY += 5
+      }
+
+      pdf.setProperties({ title: `Laporan ${data.form.buildingName || 'proposal bangunan'}`, subject: 'PROJECT XLC property report' })
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(9)
+      pdf.setTextColor(35, 74, 61)
+      pdf.text('PROJECT XLC / PROPERTY REPORT', margin, cursorY)
+      cursorY += 10
+      const titleLines = pdf.splitTextToSize(data.form.buildingName || 'Proposal bangunan', contentWidth)
+      pdf.setFontSize(22)
+      pdf.setTextColor(23, 43, 37)
+      pdf.text(titleLines, margin, cursorY)
+      cursorY += titleLines.length * 9 + 4
+      addEntry('User', data.user)
+      addEntry('Date Time Data', formattedDate)
+
+      reportSections.forEach((section) => {
+        addSection(section.title)
+        section.fields.forEach(([key, label]) => {
+          const value = ['rentPrice', 'annualRent'].includes(key) && data.form[key] !== '' && data.form[key] != null
+            ? formatPriceValue(data.form[key])
+            : data.form[key]
+          addEntry(label, value)
+        })
+      })
+
+      addSection('Upload foto')
+      ;[['front', 'Tampak depan bangunan'], ['groundFloor', 'Tampak dalam lantai dasar'], ['upperFloor', 'Tampak dalam lantai atas']].forEach(([key, label]) => addEntry(label, data.photoNames?.[key]))
+      addSection('Peta lokasi')
+      addEntry('Google Maps', data.googleMapsLink)
+
+      const pageCount = pdf.getNumberOfPages()
+      for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+        pdf.setPage(pageNumber)
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(8)
+        pdf.setTextColor(94, 114, 105)
+        pdf.text(`PROJECT XLC | ${pageNumber} / ${pageCount}`, pageWidth - margin, pageHeight - 8, { align: 'right' })
+      }
+
+      const fileName = String(data.form.buildingName || 'laporan-proposal').trim().replace(/[\\/:*?"<>|]/g, '-')
+      pdf.save(`${fileName || 'laporan-proposal'}.pdf`)
+      setPdfStatus('PDF laporan berhasil diunduh.')
+    } catch {
+      setPdfStatus('PDF gagal dibuat. Silakan coba lagi.')
+    } finally {
+      setIsGeneratingPdf(false)
+    }
+  }
+
+  function submitReport() {
+    if (!window.opener || window.opener.closed) {
+      setSubmitStatus('Form utama tidak tersedia. Buka laporan dari halaman formulir untuk mengirim data.')
+      return
+    }
+
+    setIsSubmitting(true)
+    setSubmitStatus('Mengirim data ke Google Sheets...')
+    const timeoutId = window.setTimeout(() => {
+      window.removeEventListener('message', handleSubmitResult)
+      setIsSubmitting(false)
+      setSubmitStatus('Pengiriman tidak mendapat respons. Periksa koneksi dan status Google Sheets.')
+    }, 30000)
+
+    function handleSubmitResult(event) {
+      if (event.origin !== window.location.origin || event.source !== window.opener || event.data?.type !== 'projectxlc:report-submit-result') return
+      window.clearTimeout(timeoutId)
+      window.removeEventListener('message', handleSubmitResult)
+      setIsSubmitting(false)
+      setSubmitted(event.data.ok)
+      setSubmitStatus(event.data.message)
+    }
+
+    window.addEventListener('message', handleSubmitResult)
+    window.opener.postMessage({ type: 'projectxlc:report-submit' }, window.location.origin)
+  }
+
+  return (
+    <main className="preview-page report-page">
+      <header className="app-header report-header"><div><div className="brand-mark">XLC<span>•</span></div><p className="kicker">PROJECT XLC / PROPERTY REPORT</p></div><div className="report-actions"><button type="button" className="preview-button" onClick={downloadReportPdf} disabled={isGeneratingPdf}>{isGeneratingPdf ? 'CREATING PDF...' : 'PRINT'}</button><button type="button" className="preview-button" onClick={submitReport} disabled={isSubmitting || submitted}>{isSubmitting ? 'SUBMITTING...' : 'SUBMIT'}</button><button type="button" className="preview-button" onClick={() => window.close()}>CLOSED</button></div></header>
+      {pdfStatus ? <p className="report-submit-status" role="status">{pdfStatus}</p> : null}
+      {submitStatus ? <p className="report-submit-status" role="status">{submitStatus}</p> : null}
+      <section className="preview-intro report-intro"><p className="kicker">Laporan proposal bangunan</p><h1>{data.form.buildingName || 'Proposal bangunan'}</h1></section>
+      <section className="report-meta" aria-label="Informasi laporan"><div><small>User</small><strong>{data.user || '-'}</strong></div><div><small>Date Time Data</small><strong>{formattedDate}</strong></div></section>
+      <div className="report-sections">
+        {reportSections.map((section) => (
+          <section className="report-section" key={section.title}>
+            <div className="report-section-heading"><p className="kicker">Property details</p><h2>{section.title}</h2></div>
+            <dl className="report-grid">
+              {section.fields.map(([key, label]) => {
+                const value = data.form[key]
+                const displayValue = ['rentPrice', 'annualRent'].includes(key) && value !== '' && value != null ? formatPriceValue(value) : value || '-'
+                return <div key={key}><dt>{label}</dt><dd>{displayValue}</dd></div>
+              })}
+            </dl>
+          </section>
+        ))}
+        <section className="report-section">
+          <div className="report-section-heading"><p className="kicker">Visual documentation</p><h2>Upload foto</h2></div>
+          <dl className="report-grid report-photo-list">
+            {['front', 'groundFloor', 'upperFloor'].map((key, index) => <div key={key}><dt>{['Tampak depan bangunan', 'Tampak dalam lantai dasar', 'Tampak dalam lantai atas'][index]}</dt><dd>{data.photoNames?.[key] || '-'}</dd></div>)}
+          </dl>
+        </section>
+        <section className="report-section report-map-section">
+          <div className="report-section-heading"><p className="kicker">Location reference</p><h2>Peta lokasi</h2></div>
+          <a className="map-link" href={data.googleMapsLink} target="_blank" rel="noreferrer">Buka lokasi di Google Maps <span aria-hidden="true">↗</span></a>
+        </section>
+      </div>
+    </main>
+  )
+}
+
 function AdminUserControls({ action, accountsList, form, setForm, error, onSubmit, onEdit, onDelete, onToggleStatus }) {
   if (action === 'list') return <div className="admin-data-panel user-panel inline-status-panel"><div className="admin-panel-heading"><div><p className="kicker">Account directory</p><h2>User & role</h2></div></div><div className="user-list">{accountsList.map((account) => <div className="user-row" key={account.username}><div className="user-avatar">{account.username.charAt(0)}</div><div><strong>{account.name || account.username}</strong><span>{account.email || account.username}</span></div><b className={account.role === 'admin' ? 'role-badge admin' : 'role-badge'}>{account.role}</b><b className={account.active ? 'status-badge active' : 'status-badge inactive'}>{account.active ? 'ACTIVE' : 'INACTIVE'}</b><div className="status-actions"><button type="button" className="activate-button" disabled={account.active} onClick={() => onToggleStatus(account.username, true)}>Activate</button><button type="button" className="delete-button" disabled={!account.active} onClick={() => onToggleStatus(account.username, false)}>Deactivate</button></div></div>)}</div></div>
   if (action === 'activate' || action === 'deactivate') return <div className="admin-user-controls"><p className="kicker">{action === 'activate' ? 'Activate account' : 'Deactivate account'}</p><h2>{action === 'activate' ? 'Aktifkan user' : 'Nonaktifkan user'}</h2><div className="admin-delete-list">{accountsList.filter((account) => action === 'activate' ? !account.active : account.active).map((account) => <div className="admin-delete-row" key={account.username}><span>{account.name || account.username} <small>{account.username} / {account.role}</small></span><button type="button" className={action === 'activate' ? 'activate-button' : 'delete-button'} onClick={() => onToggleStatus(account.username, action === 'activate')}>{action === 'activate' ? 'Activate' : 'Deactivate'}</button></div>)}</div>{error ? <p className="login-error">{error}</p> : null}</div>
@@ -236,16 +423,35 @@ function AdminDashboard({ username, onLogout }) {
 }
 
 function App() {
+  const reportMode = new URLSearchParams(window.location.search).get('report') === '1'
   const [authenticated, setAuthenticated] = useState(() => sessionStorage.getItem('projectxlc-authenticated') === 'true')
   const username = sessionStorage.getItem('projectxlc-username') || 'USER'
   const role = sessionStorage.getItem('projectxlc-role') || 'user'
+  const [reportData] = useState(() => {
+    if (!reportMode) return null
+    try {
+      return JSON.parse(sessionStorage.getItem('projectxlc-report-preview') || 'null')
+    } catch {
+      return null
+    }
+  })
   const [form, setForm] = useState(initialForm)
   const [photos, setPhotos] = useState({ front: null, groundFloor: null, upperFloor: null })
   const [saved, setSaved] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
   const [lastSaved, setLastSaved] = useState(null)
-  const [showPreview, setShowPreview] = useState(false)
   const [locationError, setLocationError] = useState('')
+  const formRef = useRef(null)
+  const reportSubmitSource = useRef(null)
+
+  function openReportPage() {
+    const dateTimeData = new Date().toISOString()
+    const googleMapsLink = form.latitude && form.longitude ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}` : 'https://www.google.com/maps'
+    const photoNames = Object.fromEntries(Object.entries(photos).map(([name, photo]) => [name, photo?.name || '']))
+    sessionStorage.setItem('projectxlc-report-preview', JSON.stringify({ form, user: username, dateTimeData, photoNames, googleMapsLink }))
+    const reportWindow = window.open(`${window.location.pathname}?report=1`, '_blank')
+    if (!reportWindow) setLocationError('Tab laporan diblokir oleh browser. Izinkan pop-up lalu coba lagi.')
+  }
 
   function handleLogin(username, role) {
     sessionStorage.setItem('projectxlc-authenticated', 'true')
@@ -266,6 +472,24 @@ function App() {
     if (draft) setForm({ ...initialForm, ...JSON.parse(draft) })
   }, [])
 
+  useEffect(() => {
+    function handleReportSubmit(event) {
+      if (event.origin !== window.location.origin || event.data?.type !== 'projectxlc:report-submit') return
+      const formElement = formRef.current
+      if (!formElement) return
+      if (!formElement.reportValidity()) {
+        event.source?.postMessage({ type: 'projectxlc:report-submit-result', ok: false, message: 'Lengkapi semua field wajib pada formulir terlebih dahulu.' }, event.origin)
+        return
+      }
+      reportSubmitSource.current = event.source
+      formElement.requestSubmit()
+    }
+
+    window.addEventListener('message', handleReportSubmit)
+    return () => window.removeEventListener('message', handleReportSubmit)
+  }, [])
+
+  if (reportMode) return <ReportPage data={reportData} />
   if (!authenticated) return <LoginScreen onLogin={handleLogin} />
   if (role === 'admin') return <AdminDashboard username={username} onLogout={handleLogout} />
 
@@ -304,6 +528,7 @@ function App() {
 
   async function handleSubmit(event) {
     event.preventDefault()
+    let submitResult = { ok: false, message: googleSheetsUrl ? 'Draft tersimpan di perangkat, tetapi pengiriman ke Google Sheets gagal.' : 'Draft tersimpan di perangkat. Google Sheets belum terhubung.' }
     const submittedAt = new Date().toISOString()
     const normalizedForm = {
       ...form,
@@ -332,9 +557,14 @@ function App() {
       try {
         await fetch(googleSheetsUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
         setSaveMessage('Data tersimpan di perangkat dan dikirim ke Google Sheets.')
+        submitResult = { ok: true, message: 'Data berhasil dikirim ke Google Sheets.' }
       } catch {
         setSaveMessage('Draft tersimpan di perangkat, tetapi pengiriman ke Google Sheets gagal.')
       }
+    }
+    if (reportSubmitSource.current && !reportSubmitSource.current.closed) {
+      reportSubmitSource.current.postMessage({ type: 'projectxlc:report-submit-result', ...submitResult }, window.location.origin)
+      reportSubmitSource.current = null
     }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -352,9 +582,9 @@ function App() {
   return (
     <main className="app-shell">
       <header className="app-header"><div className="brand-mark">XLC<span>•</span></div><div className="header-meta"><span className="live-dot" /> Form proposal gedung / {role}</div></header>
-      <section className="intro"><div className="welcome-row"><p className="welcome-message">Selamat Datang, {username}</p><div className="welcome-actions"><button type="button" className="logout-button" onClick={handleLogout}>Keluar</button><button type="button" className="preview-button welcome-preview-button" onClick={() => setShowPreview((current) => !current)}>{showPreview ? 'Tutup Preview' : 'Preview Data'}</button></div></div><p className="kicker">PROJECT XLC / PROPERTY INTAKE</p><h1>Proposal bangunan<br /><em>siap ditinjau.</em></h1><p className="intro-copy">Lengkapi detail properti untuk membantu tim menilai lokasi, biaya, dan kesiapan gedung.</p><div className="progress-line"><span /><span /><span /><span /><span /></div></section>
+      <section className="intro"><div className="welcome-row"><p className="welcome-message">Selamat Datang, {username}</p><div className="welcome-actions"><button type="button" className="logout-button" onClick={handleLogout}>Keluar</button><button type="button" className="preview-button welcome-preview-button" onClick={openReportPage}>Preview Data</button></div></div><p className="kicker">PROJECT XLC / PROPERTY INTAKE</p><h1>Proposal bangunan<br /><em>siap ditinjau.</em></h1><p className="intro-copy">Lengkapi detail properti untuk membantu tim menilai lokasi, biaya, dan kesiapan gedung.</p><div className="progress-line"><span /><span /><span /><span /><span /></div></section>
       {saved ? <div className="success-banner" role="status"><strong>Data tersimpan.</strong> {saveMessage}</div> : null}
-      <form onSubmit={handleSubmit}>
+      <form ref={formRef} onSubmit={handleSubmit}>
         <section className="form-section" id="building"><div className="section-title"><span>01</span><div><p className="kicker">Property profile</p><h2>Data bangunan</h2><p>Identitas dasar dan kondisi fisik properti.</p></div></div><div className="field-grid">
           <Field label="Nama Bangunan" name="buildingName" value={form.buildingName} onChange={handleChange} placeholder="Contoh: Gedung Cilandak" required /><Field label="Alamat" name="address" value={form.address} onChange={handleChange} type="textarea" placeholder="Alamat lengkap bangunan" required /><Field label="Jumlah lantai" name="floors" value={form.floors} onChange={handleChange} type="number" placeholder="0" /><Field label="Luas tanah (m²)" name="landArea" value={form.landArea} onChange={handleChange} type="number" placeholder="0" /><Field label="Luas bangunan (m²)" name="buildingArea" value={form.buildingArea} onChange={handleChange} type="number" placeholder="0" /><Field label="Ukuran panjang (m)" name="length" value={form.length} onChange={handleChange} type="number" placeholder="0" /><Field label="Ukuran lebar (m)" name="width" value={form.width} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah toilet" name="toilets" value={form.toilets} onChange={handleChange} type="number" placeholder="0" /><Field label="Kelengkapan IMB" name="imb" value={form.imb} onChange={handleChange} options={['Lengkap', 'Tidak lengkap', 'Belum diketahui']} /><Field label="Kelengkapan SHM" name="shm" value={form.shm} onChange={handleChange} options={['Lengkap', 'Tidak lengkap', 'Belum diketahui']} /><Field label="Ukuran keramik lantai (cm)" name="tileSize" value={form.tileSize} onChange={handleChange} placeholder="Contoh: 60 x 60" /><Field label="Warna keramik lantai" name="tileColor" value={form.tileColor} onChange={handleChange} options={['Krem', 'Putih', 'Lainnya']} /><Field label="Penutup Bangunan" name="buildingCover" value={form.buildingCover} onChange={handleChange} options={['GENTENG', 'BETON', 'ASBES', 'SENG']} />
         </div></section>
@@ -364,8 +594,7 @@ function App() {
         <section className="form-section" id="other"><div className="section-title"><span>05</span><div><p className="kicker">Finishing & inventory</p><h2>Lain-lain</h2><p>Renovasi dan inventaris yang sudah tersedia.</p></div></div><div className="field-grid"><Field label="Perlu renovasi?" name="needsRenovation" value={form.needsRenovation} onChange={handleChange} options={['Tidak', 'Ya', 'Belum diketahui']} />{form.needsRenovation === 'Ya' ? <Field label="Jenis renovasi" name="renovationType" value={form.renovationType} onChange={handleChange} type="textarea" placeholder="Jelaskan kebutuhan renovasi" /> : null}<Field label="Pemilik bersedia mencat dinding dalam" name="paintInside" value={form.paintInside} onChange={handleChange} options={['Ya', 'Tidak', 'Tidak diketahui']} /><Field label="Pemilik bersedia mencat dinding luar" name="paintOutside" value={form.paintOutside} onChange={handleChange} options={['Ya', 'Tidak', 'Tidak diketahui']} /><Field label="Pemilik bersedia general cleaning" name="generalCleaning" value={form.generalCleaning} onChange={handleChange} options={['Ya', 'Tidak', 'Tidak diketahui']} /><Field label="Pemilik bersedia mengganti keramik sesuai standard XLC" name="replaceTiles" value={form.replaceTiles} onChange={handleChange} options={['Ya', 'Tidak', 'Tidak diketahui']} /></div><div className="inventory-heading"><p className="kicker">Jika sudah tersedia di gedung yang dipropose</p><h3>Inventaris gedung</h3></div><div className="field-grid inventory-grid"><Field label="Jumlah AC" name="ac" value={form.ac} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah kipas angin" name="fans" value={form.fans} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah infocus monitor" name="infocus" value={form.infocus} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah TV" name="tv" value={form.tv} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah dispenser" name="dispenser" value={form.dispenser} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah papan tulis" name="whiteboard" value={form.whiteboard} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah meja" name="tables" value={form.tables} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah kursi" name="chairs" value={form.chairs} onChange={handleChange} type="number" placeholder="0" /><Field label="Jumlah galon" name="gallons" value={form.gallons} onChange={handleChange} type="number" placeholder="0" /></div></section>
         <section className="form-section photo-section" id="photos"><div className="section-title"><span>06</span><div><p className="kicker">Visual documentation</p><h2>Upload Foto</h2><p>Tambahkan foto kondisi aktual bangunan.</p></div></div><div className="photo-grid"><PhotoUpload label="Tampak Depan Bangunan" photo={photos.front} onChange={(event) => handlePhotoChange('front', event)} /><PhotoUpload label="Tampak Dalam Lantai Dasar" photo={photos.groundFloor} onChange={(event) => handlePhotoChange('groundFloor', event)} /><PhotoUpload label="Tampak Dalam Lantai Atas" photo={photos.upperFloor} onChange={(event) => handlePhotoChange('upperFloor', event)} /></div></section>
         <section className="form-section coordinates-section" id="coordinates"><div className="section-title"><span>07</span><div><p className="kicker">Location capture</p><h2>Lokasi bangunan</h2><p>Ambil koordinat perangkat dan buka titiknya di Google Maps.</p></div></div><div className="location-actions"><button type="button" className="preview-button" onClick={captureLocation}>Ambil lokasi saya</button>{locationError ? <span className="location-message">{locationError}</span> : null}</div><div className="field-grid"><Field label="Latitude" name="latitude" value={form.latitude} onChange={handleChange} placeholder="Contoh: -6.207450" required={false} /><Field label="Longitude" name="longitude" value={form.longitude} onChange={handleChange} placeholder="Contoh: 106.714135" required={false} /></div><iframe className="map-frame" title="Google Maps lokasi bangunan" src={form.latitude && form.longitude ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}&output=embed` : 'https://www.google.com/maps?q=Indonesia&output=embed'} loading="lazy" referrerPolicy="no-referrer-when-downgrade" /></section>
-        <div className="preview-menu"><button type="button" className="preview-button" onClick={() => setShowPreview((current) => !current)}>{showPreview ? 'Tutup Preview' : 'Preview Data'}</button></div>
-        {showPreview ? <section className="preview-panel" aria-label="Preview data"><div className="preview-heading"><div><p className="kicker">Review sebelum simpan</p><h3>Preview Data</h3></div><span>{form.buildingName || 'Nama belum diisi'}</span></div><div className="preview-grid"><div><small>Alamat</small><strong>{form.address || '-'}</strong></div><div><small>Area</small><strong>{form.buildingAreaType || '-'}</strong></div><div><small>Harga sewa</small><strong>{form.rentPrice ? formatPriceValue(form.rentPrice) : '-'}</strong></div><div><small>Kontrak</small><strong>{form.contractType || '-'} / {form.contractPeriod || '-'} tahun</strong></div><div><small>Lingkungan</small><strong>{form.environment || '-'}</strong></div><div><small>Foto terunggah</small><strong>{Object.values(photos).filter(Boolean).length} / 3</strong></div></div></section> : null}
+        <div className="preview-menu"><button type="button" className="preview-button" onClick={openReportPage}>Preview Data</button></div>
         <div className="form-actions"><button type="button" className="text-button" onClick={clearForm}>Hapus isian</button><button type="submit" className="submit-button">Simpan Data <span>→</span></button></div>
       </form>
       <footer className="app-footer"><span>PROJECTXLC</span><span>{lastSaved ? `Terakhir disimpan ${new Date(lastSaved).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}` : 'Draft belum disimpan'}</span></footer>

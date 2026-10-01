@@ -219,6 +219,33 @@ form { display: flex; flex-direction: column; }
 .preview-photo-summary { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); }
 .preview-photo-summary > div { display: flex; justify-content: space-between; gap: 20px; padding: 11px 0; border-bottom: 1px solid var(--line); font-size: .84rem; }
 .preview-photo-summary strong { color: var(--moss); text-align: right; overflow-wrap: anywhere; }
+.report-page { max-width: 1040px; }
+.report-header { align-items: center; }
+.report-header .kicker { margin: 10px 0 0; }
+.report-actions { display: flex; align-items: center; gap: 10px; }
+.report-actions .preview-button { width: auto; white-space: nowrap; }
+.report-submit-status { margin: 14px 0 0; color: var(--moss); font-size: .84rem; font-weight: 700; }
+.report-intro { padding: 56px 0 28px; }
+.report-intro h1 { font-size: clamp(2.8rem, 6vw, 4.8rem); overflow-wrap: anywhere; }
+.report-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 2px solid var(--ink); border-bottom: 1px solid var(--line); }
+.report-meta > div { display: flex; flex-direction: column; gap: 7px; padding: 16px 18px 16px 0; }
+.report-meta > div + div { padding-left: 18px; border-left: 1px solid var(--line); }
+.report-meta small, .report-grid dt { color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.report-meta strong { overflow-wrap: anywhere; font-size: .88rem; }
+.report-section { padding: 26px 0 8px; border-bottom: 1px solid var(--line); }
+.report-section-heading { display: flex; align-items: baseline; gap: 14px; margin-bottom: 12px; }
+.report-section-heading .kicker { margin: 0; white-space: nowrap; }
+.report-section-heading h2 { margin: 0; font-size: 1.2rem; text-transform: uppercase; }
+.report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; margin: 0; }
+.report-grid > div { min-width: 0; padding: 12px 0; border-bottom: 1px solid rgba(23, 43, 37, .07); }
+.report-grid dt { margin-bottom: 5px; }
+.report-grid dd { margin: 0; overflow-wrap: anywhere; font-size: .9rem; line-height: 1.45; }
+.report-photo-list > div { display: flex; justify-content: space-between; gap: 18px; }
+.report-photo-list dt { margin: 0; }
+.report-photo-list dd { text-align: right; }
+.report-map-section { padding-bottom: 24px; }
+.report-map-section .map-link { margin-top: 0; }
+.report-sections { margin-top: 12px; }
 .back-button { display: block; margin: 22px 0 0 auto; padding: 12px 18px; border: 1px solid var(--moss); border-radius: 12px; background: transparent; color: var(--moss); font-weight: 800; }
 .text-button { padding: 12px 0; border: 0; background: transparent; color: var(--muted); font-size: .85rem; }
 .text-button:hover { color: var(--orange); }
@@ -355,6 +382,15 @@ form { display: flex; flex-direction: column; }
   .photo-upload { min-height: 170px; }
   .preview-heading { flex-direction: column; }
   .preview-heading > span { text-align: left; }
+  .report-header { align-items: flex-start; flex-wrap: wrap; gap: 16px; }
+  .report-actions { width: 100%; }
+  .report-actions .preview-button { flex: 1; width: auto; }
+  .report-intro { padding: 36px 0 22px; }
+  .report-meta, .report-grid { grid-template-columns: 1fr; }
+  .report-meta > div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
+  .report-section-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .report-photo-list > div { align-items: flex-start; flex-direction: column; gap: 5px; }
+  .report-photo-list dd { text-align: left; }
   .preview-menu { justify-content: stretch; }
   .preview-button { width: 100%; }
   .preview-photo-summary > div { align-items: flex-start; flex-direction: column; gap: 5px; }
@@ -397,4 +433,16 @@ form { display: flex; flex-direction: column; }
   .user-row .status-badge, .user-row .role-badge { margin-left: 51px; }
   .status-actions { margin-left: 51px; }
   .status-actions button { flex: 1; }
+}
+
+@media print {
+  body { background: #fff; color: #111; }
+  body::before, .report-actions, .report-submit-status { display: none; }
+  .report-page { max-width: none; padding: 0; }
+  .report-header { padding: 0 0 14px; border: 0; border-bottom: 1px solid #bbb; border-radius: 0; background: #fff; box-shadow: none; }
+  .report-intro { padding: 22px 0; }
+  .report-intro h1 { font-size: 34pt; }
+  .report-section { break-inside: avoid; }
+  .report-sections, .report-meta { box-shadow: none; background: #fff; }
+  .report-grid > div { border-color: #ddd; }
 }
