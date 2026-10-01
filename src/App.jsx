@@ -158,6 +158,7 @@ function ReportPage({ data }) {
   const [submitted, setSubmitted] = useState(false)
   const [pdfStatus, setPdfStatus] = useState('')
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
+  const [isClosing, setIsClosing] = useState(false)
 
   if (!data?.form) {
     return <main className="preview-page"><header className="app-header"><div className="brand-mark">XLC<span>•</span></div></header><section className="preview-intro"><p className="kicker">PROJECT XLC / REPORT</p><h1>Data laporan<br /><em>tidak tersedia.</em></h1><p className="intro-copy">Buka laporan dari tombol Preview Data pada formulir.</p></section></main>
@@ -267,6 +268,40 @@ function ReportPage({ data }) {
     }
   }
 
+  function closeReportAndClear() {
+    if (!window.confirm('Kembali ke formulir dan hapus semua isian?')) return
+
+    if (!window.opener || window.opener.closed) {
+      localStorage.removeItem('projectxlc-building-form')
+      sessionStorage.removeItem('projectxlc-report-preview')
+      window.location.assign(window.location.pathname)
+      return
+    }
+
+    setIsClosing(true)
+    setSubmitStatus('Menghapus isian dan kembali ke formulir...')
+    const timeoutId = window.setTimeout(() => {
+      window.removeEventListener('message', handleClearResult)
+      setIsClosing(false)
+      setSubmitStatus('Formulir tidak merespons. Data belum dihapus.')
+    }, 10000)
+
+    function handleClearResult(event) {
+      if (event.origin !== window.location.origin || event.source !== window.opener || event.data?.type !== 'projectxlc:report-close-clear-result') return
+      window.clearTimeout(timeoutId)
+      window.removeEventListener('message', handleClearResult)
+      if (event.data.ok) {
+        window.close()
+        return
+      }
+      setIsClosing(false)
+      setSubmitStatus('Data tidak dapat dihapus. Silakan coba lagi.')
+    }
+
+    window.addEventListener('message', handleClearResult)
+    window.opener.postMessage({ type: 'projectxlc:report-close-clear' }, window.location.origin)
+  }
+
   function submitReport() {
     if (!window.opener || window.opener.closed) {
       setSubmitStatus('Form utama tidak tersedia. Buka laporan dari halaman formulir untuk mengirim data.')
@@ -296,7 +331,7 @@ function ReportPage({ data }) {
 
   return (
     <main className="preview-page report-page">
-      <header className="app-header report-header"><div><div className="brand-mark">XLC<span>•</span></div><p className="kicker">PROJECT XLC / PROPERTY REPORT</p></div><div className="report-actions"><button type="button" className="preview-button" onClick={downloadReportPdf} disabled={isGeneratingPdf}>{isGeneratingPdf ? 'CREATING PDF...' : 'PRINT'}</button><button type="button" className="preview-button" onClick={submitReport} disabled={isSubmitting || submitted}>{isSubmitting ? 'SUBMITTING...' : 'SUBMIT'}</button><button type="button" className="preview-button" onClick={() => window.close()}>CLOSED</button></div></header>
+      <header className="app-header report-header"><div><div className="brand-mark">XLC<span>•</span></div><p className="kicker">PROJECT XLC / PROPERTY REPORT</p></div><div className="report-actions"><button type="button" className="preview-button" onClick={downloadReportPdf} disabled={isGeneratingPdf}>{isGeneratingPdf ? 'CREATING PDF...' : 'PRINT'}</button><button type="button" className="preview-button" onClick={submitReport} disabled={isSubmitting || submitted}>{isSubmitting ? 'SUBMITTING...' : 'SUBMIT'}</button><button type="button" className="preview-button" onClick={closeReportAndClear} disabled={isClosing}>{isClosing ? 'CLOSING...' : 'CLOSED'}</button></div></header>
       {pdfStatus ? <p className="report-submit-status" role="status">{pdfStatus}</p> : null}
       {submitStatus ? <p className="report-submit-status" role="status">{submitStatus}</p> : null}
       <section className="preview-intro report-intro"><p className="kicker">Laporan proposal bangunan</p><h1>{data.form.buildingName || 'Proposal bangunan'}</h1></section>
@@ -474,7 +509,21 @@ function App() {
 
   useEffect(() => {
     function handleReportSubmit(event) {
-      if (event.origin !== window.location.origin || event.data?.type !== 'projectxlc:report-submit') return
+      if (event.origin !== window.location.origin) return
+      if (event.data?.type === 'projectxl:report-close-clear') {
+        setForm(initialForm)
+        setPhotos({ front: null, groundFloor: null, upperFloor: null })
+        setLastSaved(null)
+        setSaved(false)
+        setSaveMessage('')
+        setLocationError('')
+        localStorage.removeItem('projectxlc-building-form')
+        sessionStorage.removeItem('projectxlc-report-preview')
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        event.source?.postMessage({ type: 'projectxl:report-close-clear-result', ok: true }, event.origin)
+        return
+      }
+      if (event.data?.type !== 'projectxlc:report-submit') return
       const formElement = formRef.current
       if (!formElement) return
       if (!formElement.reportValidity()) {
@@ -595,7 +644,7 @@ function App() {
         <section className="form-section photo-section" id="photos"><div className="section-title"><span>06</span><div><p className="kicker">Visual documentation</p><h2>Upload Foto</h2><p>Tambahkan foto kondisi aktual bangunan.</p></div></div><div className="photo-grid"><PhotoUpload label="Tampak Depan Bangunan" photo={photos.front} onChange={(event) => handlePhotoChange('front', event)} /><PhotoUpload label="Tampak Dalam Lantai Dasar" photo={photos.groundFloor} onChange={(event) => handlePhotoChange('groundFloor', event)} /><PhotoUpload label="Tampak Dalam Lantai Atas" photo={photos.upperFloor} onChange={(event) => handlePhotoChange('upperFloor', event)} /></div></section>
         <section className="form-section coordinates-section" id="coordinates"><div className="section-title"><span>07</span><div><p className="kicker">Location capture</p><h2>Lokasi bangunan</h2><p>Ambil koordinat perangkat dan buka titiknya di Google Maps.</p></div></div><div className="location-actions"><button type="button" className="preview-button" onClick={captureLocation}>Ambil lokasi saya</button>{locationError ? <span className="location-message">{locationError}</span> : null}</div><div className="field-grid"><Field label="Latitude" name="latitude" value={form.latitude} onChange={handleChange} placeholder="Contoh: -6.207450" required={false} /><Field label="Longitude" name="longitude" value={form.longitude} onChange={handleChange} placeholder="Contoh: 106.714135" required={false} /></div><iframe className="map-frame" title="Google Maps lokasi bangunan" src={form.latitude && form.longitude ? `https://www.google.com/maps?q=${form.latitude},${form.longitude}&output=embed` : 'https://www.google.com/maps?q=Indonesia&output=embed'} loading="lazy" referrerPolicy="no-referrer-when-downgrade" /></section>
         <div className="preview-menu"><button type="button" className="preview-button" onClick={openReportPage}>Preview Data</button></div>
-        <div className="form-actions"><button type="button" className="text-button" onClick={clearForm}>Hapus isian</button><button type="submit" className="submit-button">Simpan Data <span>→</span></button></div>
+        <div className="form-actions"><button type="button" className="text-button" onClick={clearForm}>Hapus isian</button></div>
       </form>
       <footer className="app-footer"><span>PROJECTXLC</span><span>{lastSaved ? `Terakhir disimpan ${new Date(lastSaved).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}` : 'Draft belum disimpan'}</span></footer>
     </main>
